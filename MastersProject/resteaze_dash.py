@@ -162,6 +162,7 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
 def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,fs):
     print("start of: findIndices")
     fullRuns = [[-1 for x in range(2)] for y in range(2)] 
+    highRuns = [[-1 for x in range(2)] for y in range(2)] 
 
     minLowDuration = minLowDuration * fs
     minHighDuration = minHighDuration * fs
@@ -181,13 +182,24 @@ def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,f
     #print(np.diff(lowValues))
     #print(lowValues)
     lowRuns = returnRuns(lowValues,minLowDuration)
+    highRuns
     numHighRuns = 0
     searchIndex = highValues[0]
     #print("searchIndex")
-    print(data.shape[0])
+    #print(data.shape[0])
     while searchIndex < data.shape[0]:
         numHighRuns = numHighRuns + 1
         distToNextLowRun,lengthOfNextLowRun = calcDistToRun(lowRuns,searchIndex)
+        if distToNextLowRun == -1: ## Then we have hit the end, record our data and stop 
+            highRuns[numHighRuns][0] = searchIndex
+            highRuns[numHighRuns][1] = data.shape[0]
+        else: ##We have hit another low point, so record our data, 
+            highRuns[numHighRuns][0] = searchIndex
+            highRuns[numHighRuns][1] = searchIndex + distToNextLowRun - 1
+            ##And then search again with the next high value after this low Run.
+            searchIndex = searchIndex + distToNextLowRun + lengthOfNextLowRun
+            searchIndex = highValues(find)
+
     print("end of: findIndices")
     return fullRuns
 
@@ -208,11 +220,23 @@ def returnRuns(vals,duration):
     runs = [startIndices,stopIndices]
     return runs
 
+"""
+ This Function finds the closest next (sequential) run from the current
+ position.  It does include prior runs.  If there is no run it returns a
+ distance of -1, otherwise it returns the distance to the next run.  It
+ will also return the length of that run.  If there is no run it returns a
+ length of -1."""
 def calcDistToRun(run,position):
     distList = run[:][0] - position
     distPos = distList[distList>0]
-    if distPos:
-        
+    if distPos.all():
+        dist = min(distPos)
+        runIndex = int(np.where(distList == dist)[0])
+        length = run[runIndex][1] - run[runIndex][0]+1
+    else:
+        length = -1
+        dist = -1
+    return dist,length
 
 
 if __name__ == '__main__':
