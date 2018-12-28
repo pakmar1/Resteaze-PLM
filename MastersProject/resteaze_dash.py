@@ -14,7 +14,6 @@ class nightData:
 
 def resteaze_dash(left,right,subjectid):
 
-
     params = init_params()
     output = init_output(subjectid)
 
@@ -36,6 +35,7 @@ def resteaze_dash(left,right,subjectid):
     else:
         print("righterror")
 
+    """ read data from csv files """
     bandData_left = np.genfromtxt(left,delimiter=',',skip_header=1)
     #print(bandData_left)
     bandData_right = np.genfromtxt(right,delimiter=',',skip_header=1)
@@ -43,16 +43,18 @@ def resteaze_dash(left,right,subjectid):
     #print(bandData_right.shape[0])
     #print(bandData_right[0][3])
 
+    """synching signals from two legs"""
     leftLeg,rightLeg = syncRE(bandData_left,bandData_right)
     print("leftleg,rightleg after syncRE: ")
     print(leftLeg.shape[0])
     print(rightLeg.shape[0])
 
-    output.up2down1 = np.ones((leftLeg.shape[0],1)) 
+    output.up2Down1 = np.ones((leftLeg.shape[0],1)) 
     
     print("dimension going in for rms")
     print(leftLeg[:,[1,2,3]].shape)
 
+    """calculating root-mean-square of the acclerometer movements for both legs"""
     output.lRMS = rms(leftLeg[:,[1,2,3]])
     output.rRMS = rms(rightLeg[:,[1,2,3]])
 
@@ -60,13 +62,16 @@ def resteaze_dash(left,right,subjectid):
     print(output.lRMS.shape)
     print(output.rRMS.shape)
 
+    """ compute LM(leg movement)"""
+    rLM=getLMiPod(params,output.rRMS,output.up2Down1)
+    #lLM=getLMiPod(params,output.rRMS,output.up2Down1)
 
 def init_output(subjectid):
     output = Output()
     output.filename = subjectid
-    output.up2down1 = []
-    output.rRMS =0
-    output.lRMS =0
+    #output.up2down1 = []
+    #output.rRMS =0
+    #output.lRMS =0
     return output
 
 def init_params():
@@ -76,7 +81,7 @@ def init_params():
     params.iLMbp='on'
     params.morphologyCriteria='on'
 
-    #%% this is for the RestEaZe data.
+    # this is for the RestEaZe data.
     #params.lowThreshold=0.005;
     #params.highThreshold=0.01;
     params.lowThreshold=0.05
@@ -144,6 +149,71 @@ def syncRE(leftLeg,rightLeg):
 def rms(x):
     y = sqrt(mean(square(x),axis=1))
     return y
+""" this LM calculation """
+def getLMiPod(paramsiPod,RMS,up2Down1):
+    print("start of: getLMiPod")
+    if RMS[0] == None:
+        LM = None
+        return
+    LM = findIndices(RMS,paramsiPod.lowThreshold,paramsiPod.highThreshold,paramsiPod.minLowDuration,paramsiPod.minHighDuration,paramsiPod.fs)
+    print("end of: getLMiPod")
+    return LM
+
+def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,fs):
+    print("start of: findIndices")
+    fullRuns = [[-1 for x in range(2)] for y in range(2)] 
+
+    minLowDuration = minLowDuration * fs
+    minHighDuration = minHighDuration * fs
+    lowValues = find(data, lambda x: x < lowThreshold) 
+    highValues = find(data, lambda x: x > highThreshold)
+
+    #print("lowValues & highValues:")
+    #print(len(lowValues))
+    #print(len(highValues))
+    if len(highValues) < 1:
+        fullRuns[0][0] = 0
+        fullRuns[0][1] = 0
+    elif len(lowValues) < 1:
+        fullRuns[0][0] = 1
+        fullRuns[0][1] = 0
+    #print("lowValues diff:")
+    #print(np.diff(lowValues))
+    #print(lowValues)
+    lowRuns = returnRuns(lowValues,minLowDuration)
+    numHighRuns = 0
+    searchIndex = highValues[0]
+    #print("searchIndex")
+    print(data.shape[0])
+    while searchIndex < data.shape[0]:
+        numHighRuns = numHighRuns + 1
+        distToNextLowRun,lengthOfNextLowRun = calcDistToRun(lowRuns,searchIndex)
+    print("end of: findIndices")
+    return fullRuns
+
+def find(a, func):
+    return [i for (i, val) in enumerate(a) if func(val)]
+
+
+def returnRuns(vals,duration): 
+    vals = np.asarray(vals)
+    k = (np.diff(vals) != 1).astype(int)
+    k = np.insert(k, 0, 1, axis=0)
+    s = np.cumsum(k)
+    x = np.histogram(s,np.arange(1,s[-1]+2))[0]
+    idx = find(k, lambda x: x != 0) 
+    idx = np.asarray(idx)
+    startIndices = vals[idx[x>=duration]]
+    stopIndices = startIndices + x[x>=duration] - 1
+    runs = [startIndices,stopIndices]
+    return runs
+
+def calcDistToRun(run,position):
+    distList = run[:][0] - position
+    distPos = distList[distList>0]
+    if distPos:
+        
+
 
 if __name__ == '__main__':
     resteaze_dash(sys.argv[1],sys.argv[2],sys.argv[3])
