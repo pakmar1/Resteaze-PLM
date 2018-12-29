@@ -149,6 +149,7 @@ def syncRE(leftLeg,rightLeg):
 def rms(x):
     y = sqrt(mean(square(x),axis=1))
     return y
+
 """ this LM calculation """
 def getLMiPod(paramsiPod,RMS,up2Down1):
     print("start of: getLMiPod")
@@ -157,50 +158,121 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
         return
     LM = findIndices(RMS,paramsiPod.lowThreshold,paramsiPod.highThreshold,paramsiPod.minLowDuration,paramsiPod.minHighDuration,paramsiPod.fs)
     print("end of: getLMiPod")
+    if LM.size == 0:
+        return
+    #%% Median must pass lowthreshold
+    if paramsiPod.morphologyCriteria == 'on':
+        LM = cutLowMedian(RMS,LM,paramsiPod.lowThreshold,paramsiPod.fs)
+    
+    #%% Add Duration in 3rd column
+    LM = LM.insert(LM, 2, values = (LM[:,1]-LM[:,0])/paramsiPod.fs, axis = 1)
+
+    #Add IMI in sec in 4th column
+    LM = LM.insert(LM, 3, values = )
+
     return LM
+
+#Remove leg movements whose median activity is less than noise level
+def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
+    print("in curLowMedian()")
+    LM1 = np.array(LM1, dtype='f')
+    opt = kwargs.get('opt', 1)
+    if opt:
+        opt = 1
+    print("opt")
+    print(opt)
+    # Calculate duration, probably don't need this though
+    LM1 = np.insert(LM1,2,values = (LM1[:,1]-LM1[:,0])/fs,axis=1)
+
+    # Add column with median values
+    LM_i = np.array(LM1, dtype='i')
+    median_col=[]
+    for i in range(LM1.shape[0]):
+        temp=np.median(dsEMG[LM_i[i,0]:LM_i[i,1]])
+        median_col.append(temp)
+    LM1 = np.insert(LM1,3,values=median_col,axis=1)
+
+    if opt == 1:
+        LM = shrinkWindow(LM1,dsEMG,fs,min)
+    elif opt == 2:
+        LM = tryShrinking(LM1,dsEMG,fs,min)
+    elif opt == 3:
+        LM = LM1
+
+    # Exclude movements that still are empty
+    LM = LM[LM[:,3] > min,0:2]
+    return LM
+    
+#A different method of checking for a movement within the movement. This
+# searches for any 0.5 second window where the median is above noise level.
+def shrinkWindow(LM,dsEMG,fs,min):
+    print("shrinkWindow():")
+    empty = find(LM[:,3], lambda x: x < min)
+    for i in range(len(empty)):
+        initstart =int(LM[empty[i]][0])
+        initstop = int(LM[empty[i]][1])
+        a = np.median(dsEMG[initstart:initstop])
+        
+        start = int(LM[empty[i]][0])
+        stop = int(start + fs/2)
+        while a < min and stop < initstop:
+            a =  np.median(dsEMG[start:stop])
+            start = int(start + fs/10)
+            stop = int(start + fs/2)
+        LM[empty[i],3] = a
+    return LM
+
+#Attempt to reduce the duration of the event in order to find a movement
+#that fits minimum density requirement.
+def tryShrinking(LM1,dsEMG,fs,min):
+    print("tryShrinking():")
+    short = find(LM1[:,3], lambda x: x < min)
+    for i in range(len(short)):
+        start = int(LM1[short[i]][0])
+        stop = int(LM1[short[i]][1])
+        while (start - stop)/fs > 0.6 and np.median(dsEMG[start:stop]) < min:
+            stop = stop - fs/10
+        LM1[short[i],3] = np.median(dsEMG[start:stop])
+    return short
 
 def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,fs):
     print("start of: findIndices")
     fullRuns = [[-1 for x in range(2)] for y in range(2)] 
-    highRuns = [[-1 for x in range(2)] for y in range(2)] 
-
     minLowDuration = minLowDuration * fs
     minHighDuration = minHighDuration * fs
     lowValues = find(data, lambda x: x < lowThreshold) 
     highValues = find(data, lambda x: x > highThreshold)
-
-    #print("lowValues & highValues:")
-    #print(len(lowValues))
-    #print(len(highValues))
+    
     if len(highValues) < 1:
         fullRuns[0][0] = 0
         fullRuns[0][1] = 0
     elif len(lowValues) < 1:
         fullRuns[0][0] = 1
         fullRuns[0][1] = 0
-    #print("lowValues diff:")
-    #print(np.diff(lowValues))
-    #print(lowValues)
     lowRuns = returnRuns(lowValues,minLowDuration)
-    highRuns
+    highRuns = []
     numHighRuns = 0
     searchIndex = highValues[0]
-    #print("searchIndex")
-    #print(data.shape[0])
+    print("searchIndex:")
+    print(searchIndex)
     while searchIndex < data.shape[0]:
-        numHighRuns = numHighRuns + 1
         distToNextLowRun,lengthOfNextLowRun = calcDistToRun(lowRuns,searchIndex)
         if distToNextLowRun == -1: ## Then we have hit the end, record our data and stop 
-            highRuns[numHighRuns][0] = searchIndex
-            highRuns[numHighRuns][1] = data.shape[0]
+            highRuns.append([searchIndex , data.shape[0]])
         else: ##We have hit another low point, so record our data, 
-            highRuns[numHighRuns][0] = searchIndex
-            highRuns[numHighRuns][1] = searchIndex + distToNextLowRun - 1
-            ##And then search again with the next high value after this low Run.
+            highRuns.append([searchIndex , searchIndex + distToNextLowRun-1])            
             searchIndex = searchIndex + distToNextLowRun + lengthOfNextLowRun
-            searchIndex = highValues(find)
-
-    print("end of: findIndices")
+            highValues = np.asarray(highValues)
+            temp = np.argwhere(highValues > searchIndex)
+            if temp.size != 0:
+                searchIndex = highValues[int(temp[0])]
+        numHighRuns = numHighRuns + 1
+    #Implement a quality control to only keep highRuns > minHighDuration
+    highRuns = np.array(highRuns)
+    runLengths = highRuns[:,1]-highRuns[:,0]
+    ind = find(runLengths, lambda x: x > minHighDuration)
+    fullRuns = highRuns[ind]
+    
     return fullRuns
 
 def find(a, func):
@@ -225,14 +297,15 @@ def returnRuns(vals,duration):
  position.  It does include prior runs.  If there is no run it returns a
  distance of -1, otherwise it returns the distance to the next run.  It
  will also return the length of that run.  If there is no run it returns a
- length of -1."""
+ length of -1.
+ """
 def calcDistToRun(run,position):
     distList = run[:][0] - position
     distPos = distList[distList>0]
     if distPos.all():
         dist = min(distPos)
         runIndex = int(np.where(distList == dist)[0])
-        length = run[runIndex][1] - run[runIndex][0]+1
+        length = run[1][runIndex] - run[0][runIndex] + 1
     else:
         length = -1
         dist = -1
