@@ -23,8 +23,6 @@ def resteaze_dash(left,right,subjectid):
         leftFileNames = os.path.splitext(left)[1]
         ext = os.path.splitext(left)[1]
 
-        #print(left)
-        #print("\n") 
         print("leftpath: "+leftPath)
         print("leftFileNames: "+leftFileNames)
         print("ext: "+ext)       
@@ -37,11 +35,7 @@ def resteaze_dash(left,right,subjectid):
 
     """ read data from csv files """
     bandData_left = np.genfromtxt(left,delimiter=',',skip_header=1)
-    #print(bandData_left)
     bandData_right = np.genfromtxt(right,delimiter=',',skip_header=1)
-
-    #print(bandData_right.shape[0])
-    #print(bandData_right[0][3])
 
     """synching signals from two legs"""
     leftLeg,rightLeg = syncRE(bandData_left,bandData_right)
@@ -53,6 +47,7 @@ def resteaze_dash(left,right,subjectid):
     
     print("dimension going in for rms")
     print(leftLeg[:,[1,2,3]].shape)
+    #################################################
 
     """calculating root-mean-square of the acclerometer movements for both legs"""
     output.lRMS = rms(leftLeg[:,[1,2,3]])
@@ -61,10 +56,17 @@ def resteaze_dash(left,right,subjectid):
     print("output of rms:")
     print(output.lRMS.shape)
     print(output.rRMS.shape)
-
+    #################################################
+    
     """ compute LM(leg movement)"""
     rLM=getLMiPod(params,output.rRMS,output.up2Down1)
-    #lLM=getLMiPod(params,output.rRMS,output.up2Down1)
+    lLM=getLMiPod(params,output.rRMS,output.up2Down1)
+    #################################################
+
+    """ Start Patrick's standard scoring stuff """
+    bCLM = candidate_lms(rLM,lLM,params)
+
+    #################################################
 
 def init_output(subjectid):
     output = Output()
@@ -150,6 +152,9 @@ def rms(x):
     y = sqrt(mean(square(x),axis=1))
     return y
 
+
+########################################################################################
+########################################################################################
 """ this LM calculation """
 def getLMiPod(paramsiPod,RMS,up2Down1):
     print("start of: getLMiPod")
@@ -211,6 +216,8 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     print("final LM:")
     print(LM)
     return LM
+#########################################################
+
 
 #Remove leg movements whose median activity is less than noise level
 def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
@@ -350,6 +357,79 @@ def calcDistToRun(run,position):
         length = -1
         dist = -1
     return dist,length
+########################################################################################
+########################################################################################
+
+
+
+
+########################################################################################
+########################################################################################
+""" candidate_lms():
+% Determine candidate leg movements for PLM from monolateral LM arrays. If
+% either rLM or lLM is empty ([]), this will return monolateral candidates,
+% otherwise if both are provided they will be combined according to current
+% WASM standards. Adds other information to the CLM table, notably
+% breakpoints to indicate potential ends of PLM runs, sleep stage, etc. Of
+% special note, the 13th column of the output array indicates which leg the
+% movement is from: 1 is right, 2 is left and 3 is bilateral.
+%
+%
+% inputs:
+%   - rLM - array from right leg (needs start and stop times)
+%   - lLM - array from left leg
+%
+"""
+def candidate_lms(rLM,lLM,params):
+    CLM=[]
+    if rLM.size != 0 and lLM.size != 0:
+        print("both full")
+        # Reduce left and right LM arrays to exclude too long movements, but add
+        # breakpoints to the following movement
+        rLM[:,2] = (rLM[:,1]-rLM[:,0])/params.fs
+        lLM[:,2] = (lLM[:,1]-lLM[:,0])/params.fs
+
+        rLM = rLM[rLM[:,2]>=0.5,:]
+        lLM = lLM[lLM[:,2]>=0.5,:]
+
+        rLM[rLM[:rLM.shape[0],2]>params.maxCLMDuration,8] = 4
+        lLM[lLM[:lLM.shape[0],2]>params.maxCLMDuration,8] = 4
+
+        # Combine left and right and sort.
+        CLM = rOV2(lLM,rLM,params.fs)
+
+    elif lLM.size != 0:
+        print("left is full")
+    
+    elif rLM.size != 0:
+        print("right is full")
+    return CLM
+
+def rOV2(lLM,rLM,fs):
+    #Combine bilateral movements if they are separated by < 0.5 seconds
+    print("function rOv2():")
+    # zeros for column 11 and 12
+    rLM = np.insert(rLM,10,values = np.zeros(rLM.shape[0]),axis=1)
+    lLM = np.insert(lLM,10,values = np.zeros(lLM.shape[0]),axis=1)
+    rLM = np.insert(rLM,11,values = np.zeros(rLM.shape[0]),axis=1)
+    lLM = np.insert(lLM,10,values = np.zeros(lLM.shape[0]),axis=1)
+
+    #combine and sort LM arrays
+    rLM = np.insert(rLM,12,values = np.ones(rLM.shape[0]),axis=1)
+    lLM = np.insert(lLM,12,values = np.full((rLM.shape[0]),2),axis=1)
+
+    combLM = np.concatenate((rLM,lLM),axis = 0)
+    combLM = combLM[combLM[:,0].argsort()]
+    
+    #distance to next movement
+    CLM = combLM
+    CLM[:,3] = np.ones(CLM.shape[0])
+    print("CLM after 4th col alter:")
+    print(CLM)
+
+    return []
+##########################################################################################
+##########################################################################################
 
 
 if __name__ == '__main__':
