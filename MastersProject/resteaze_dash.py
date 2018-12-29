@@ -165,11 +165,51 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
         LM = cutLowMedian(RMS,LM,paramsiPod.lowThreshold,paramsiPod.fs)
     
     #%% Add Duration in 3rd column
-    LM = LM.insert(LM, 2, values = (LM[:,1]-LM[:,0])/paramsiPod.fs, axis = 1)
+    LM = np.insert(LM, 2, values = (LM[:,1]-LM[:,0])/paramsiPod.fs, axis = 1)
 
     #Add IMI in sec in 4th column
-    LM = LM.insert(LM, 3, values = )
+    col_4=[]
+    col_4.append(9999)
+    col_4.extend((LM[1:LM.shape[0],0] - LM[0:LM.shape[0]-1,0])/paramsiPod.fs)
+    
+    if LM.shape[0] > 1:
+        LM = np.insert(LM, 3, values = col_4, axis = 1)
 
+    #5th column as zeros
+    LM = np.insert(LM,4,values=np.zeros(LM.shape[0]),axis=1)
+
+    LM_i = np.array(LM, dtype='i')
+
+    # Add Up2Down1 in 6th Column (5th col reserved for PLM)
+    LM = np.insert(LM,5,values = up2Down1[LM_i[:,0],0], axis = 1)
+    LM_i = np.array(LM, dtype='i')
+
+    # Convert beginning of LMs to mins in 7th Column
+    LM = np.insert(LM,6,values = LM_i[:,0]/(paramsiPod.fs*60), axis=1)
+    LM_i = np.array(LM, dtype='i')
+    
+
+
+    # Record epoch number of LM in 8th Column
+    LM = np.insert(LM,7,values = np.round(LM_i[:,6]*2 + 0.5),axis=1)
+    LM_i = np.array(LM, dtype='i')
+    
+
+    # Record breakpoints after long LM in 9th column
+    col_9=[]
+    col_9.append(1)
+    col_9.extend(LM[0:LM_i.shape[0]-1,2] > paramsiPod.maxCLMDuration)
+    LM = np.insert(LM,8,values=col_9,axis=1)
+ 
+
+    LM_i = np.array(LM, dtype='i')
+    # Record area of LM in 10th Column 
+    col_10 = []
+    for i in range(LM.shape[0]):
+        col_10.append(np.sum(RMS[LM_i[i,0]:LM_i[i,1]])/paramsiPod.fs)
+    LM = np.insert(LM,9,values=col_10,axis=1)
+    print("final LM:")
+    print(LM)
     return LM
 
 #Remove leg movements whose median activity is less than noise level
