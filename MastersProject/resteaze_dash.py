@@ -65,15 +65,15 @@ def resteaze_dash(left,right,subjectid):
 
     """ Start Patrick's standard scoring stuff """
     bCLM = candidate_lms(rLM,lLM,params)
+    calculateArousal(bCLM,leftLeg,rightLeg)
+
 
     #################################################
 
 def init_output(subjectid):
     output = Output()
     output.filename = subjectid
-    #output.up2down1 = []
-    #output.rRMS =0
-    #output.lRMS =0
+
     return output
 
 def init_params():
@@ -213,21 +213,19 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     for i in range(LM.shape[0]):
         col_10.append(np.sum(RMS[LM_i[i,0]:LM_i[i,1]])/paramsiPod.fs)
     LM = np.insert(LM,9,values=col_10,axis=1)
-    print("final LM:")
-    print(LM)
+    #print("final LM:")
+    #print(LM)
     return LM
 #########################################################
 
 
 #Remove leg movements whose median activity is less than noise level
 def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
-    print("in curLowMedian()")
     LM1 = np.array(LM1, dtype='f')
     opt = kwargs.get('opt', 1)
     if opt:
         opt = 1
-    print("opt")
-    print(opt)
+    
     # Calculate duration, probably don't need this though
     LM1 = np.insert(LM1,2,values = (LM1[:,1]-LM1[:,0])/fs,axis=1)
 
@@ -253,7 +251,7 @@ def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
 #A different method of checking for a movement within the movement. This
 # searches for any 0.5 second window where the median is above noise level.
 def shrinkWindow(LM,dsEMG,fs,min):
-    print("shrinkWindow():")
+    #print("shrinkWindow():")
     empty = find(LM[:,3], lambda x: x < min)
     for i in range(len(empty)):
         initstart =int(LM[empty[i]][0])
@@ -272,7 +270,7 @@ def shrinkWindow(LM,dsEMG,fs,min):
 #Attempt to reduce the duration of the event in order to find a movement
 #that fits minimum density requirement.
 def tryShrinking(LM1,dsEMG,fs,min):
-    print("tryShrinking():")
+    #print("tryShrinking():")
     short = find(LM1[:,3], lambda x: x < min)
     for i in range(len(short)):
         start = int(LM1[short[i]][0])
@@ -283,7 +281,6 @@ def tryShrinking(LM1,dsEMG,fs,min):
     return short
 
 def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,fs):
-    print("start of: findIndices")
     fullRuns = [[-1 for x in range(2)] for y in range(2)] 
     minLowDuration = minLowDuration * fs
     minHighDuration = minHighDuration * fs
@@ -296,12 +293,11 @@ def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,f
     elif len(lowValues) < 1:
         fullRuns[0][0] = 1
         fullRuns[0][1] = 0
+
     lowRuns = returnRuns(lowValues,minLowDuration)
     highRuns = []
     numHighRuns = 0
     searchIndex = highValues[0]
-    print("searchIndex:")
-    print(searchIndex)
     while searchIndex < data.shape[0]:
         distToNextLowRun,lengthOfNextLowRun = calcDistToRun(lowRuns,searchIndex)
         if distToNextLowRun == -1: ## Then we have hit the end, record our data and stop 
@@ -400,14 +396,98 @@ def candidate_lms(rLM,lLM,params):
 
     elif lLM.size != 0:
         print("left is full")
-    
+        lLM[:,2] = (lLM[:,1] - lLM[:,0])/params.fs
+        lLM = lLM[lLM[:,2] > 0.5,:]
+        lLM[lLM[0:lLM.shape[0]-1,2] > params.maxCLMDuration,8] = 4  #too long mclm
+        CLM = lLM
+        CLM = np.insert(CLM,10,values = np.zeros(rLM.shape[0]),axis=1)
+        CLM = np.insert(CLM,11,values = np.zeros(rLM.shape[0]),axis=1)
+        CLM = np.insert(CLM,12,values = np.zeros(rLM.shape[0]),axis=1)
+
     elif rLM.size != 0:
         print("right is full")
+        rLM[:,2] = (rLM[:,1] - rLM[:,0])/params.fs
+        rLM = rLM[rLM[:,2] > 0.5,:]
+        rLM[rLM[0:rLM.shape[0]-1,2] > params.maxCLMDuration,8] = 4  #too long mclm
+        CLM = rLM
+        CLM = np.insert(CLM,10,values = np.zeros(rLM.shape[0]),axis=1)
+        CLM = np.insert(CLM,11,values = np.zeros(rLM.shape[0]),axis=1)
+        CLM = np.insert(CLM,12,values = np.zeros(rLM.shape[0]),axis=1)
+    else:
+        CLM = []
+
+    if np.sum(CLM) == 0:
+        return []
+    
+    # if a bilateral movement consists of one or more monolateral movements
+    # that are longer than 10 seconds (standard), the entire combined movement
+    # is rejected, and a breakpoint is placed on the next movement. When
+    # inspecting IMI of CLM later, movements with the bp code 4 will be
+    # excluded because IMI is disrupted by a too-long LM
+    contains_too_long = find(CLM[:,8],lambda x: x ==4)
+    for i in range(len(contains_too_long)):
+        CLM[contains_too_long[i]+1,8] = 4
+    CLM = np.delete(CLM,contains_too_long,0)
+
+    # add breakpoints if the duration of the combined movement is greater
+    # than 15 seconds (standard) or if a bilateral movement is made up of
+    # greater than 4 (standard) monolateral movements. These breakpoints
+    # are actually added to the subsequent movement, and the un-CLM is
+    # removed.
+    CLM[:,2] = (CLM[:,1]-CLM[:,0])/params.fs
+    
+    col_9_bclm = find(CLM[0:CLM.shape[0]-1,2], lambda x: x > params.maxbCLMDuration)
+    for index in range(len(col_9_bclm)):
+        col_9_bclm[index] = col_9_bclm[index] +1
+
+    CLM[col_9_bclm,8] = 3 # too long bclm
+    
+    col_9_cmbd = find(CLM[0:CLM.shape[0]-1,3], lambda x: x > params.maxbCLMOverlap)
+    for index in range(len(col_9_cmbd)):
+        col_9_cmbd[index] = col_9_cmbd[index] +1
+
+    CLM[col_9_cmbd,8] =  5 # too many cmbd mvmts
+
+    print("CLM before")
+    print(CLM.shape)
+    for value in range(CLM.shape[0]):
+        if CLM[value,3] > params.maxbCLMOverlap or CLM[value,2] > params.maxbCLMDuration:
+            np.delete(CLM,value,0)
+
+    CLM[:,3] = np.zeros(CLM.shape[0]) # clear out the #combined mCLM
+
+    # If there are no CLM, return an empty vector
+    if CLM.size == 0:
+        # Add IMI (col 4), sleep stage (col
+        # 6). Col 5 is reserved for PLM marks later
+        CLM = getIMI(CLM, params.fs)
+
+        # add breakpoints if IMI < minIMI. This is according to new standards.
+        # I believe we also need a breakpoint after this movement, so that a
+        # short IMI cannot begin a run of PLM
+        if params.iLMbp == 'on':
+            CLM[CLM[:,3] < params.minIMIDuration, 9] = 2 #short IMI
+        else:
+            CLM = removeShortIMI(CLM,params)
+        
+        # Add movement start time in minutes (col 7) and sleep epoch number
+        # (col 8)
+        CLM[:,6] = CLM[:,0]/(params.fs * 60)
+        CLM[:,7] = np.rint(CLM[:,6] * 2 + 0.5)
+     
+        # The area of the leg movement should go here. However, it is not
+        # currently well defined in the literature for combined legs, and we
+        # have omitted it temporarily
+        CLM[:,9:11] = np.zeros(CLM.shape[0])
+
+        # 3 add breakpoints if IMI > 90 seconds (standard)    
+        CLM[CLM[:,3] > params.maxIMIDuration,8] = 1
+        print("CLM out of candidate_lms():")
+        print(CLM)
     return CLM
 
 def rOV2(lLM,rLM,fs):
     #Combine bilateral movements if they are separated by < 0.5 seconds
-    print("function rOv2():")
     # zeros for column 11 and 12
     rLM = np.insert(rLM,10,values = np.zeros(rLM.shape[0]),axis=1)
     lLM = np.insert(lLM,10,values = np.zeros(lLM.shape[0]),axis=1)
@@ -424,10 +504,171 @@ def rOV2(lLM,rLM,fs):
     #distance to next movement
     CLM = combLM
     CLM[:,3] = np.ones(CLM.shape[0])
-    print("CLM after 4th col alter:")
-    print(CLM)
+    #CLM_i  = np.array(CLM, dtype='i')
 
-    return []
+    i = 0
+    while i < CLM.shape[0]-1:
+    # make sure to check if this is correct logic for the half second
+    # overlap period...
+        a1 = np.arange(CLM[i,0],CLM[i,1])
+        a2 = np.arange(CLM[i+1,0]-fs/2, CLM[i+1,1])
+        intersect = np.intersect1d(a1,a2)
+ 
+        if intersect.size == 0:
+            i = i+1
+        else:
+            CLM[i:1] = np.maximum(CLM[i,1],CLM[i+1,1])
+            CLM[i:3] = CLM[i:3] + CLM[i+1,3]
+            CLM[i:8] = np.maximum(CLM[i,8],CLM[i+1,8])
+            if CLM[i,12] != CLM[i+1,12]:
+                CLM[i,12]=3
+            CLM[i+1,:] = np.empty(CLM.shape[1])
+    return CLM
+
+# getIMI calculates intermovement interval and stores in the fourth column
+# of the input array. IMI is onset-to-onset and measured in seconds
+def getIMI(LM,fs):
+    LM[0,3] = 9999 # archaic... don't know if we need this
+    LM[1:LM.shape[0],3] = (LM[1:LM.shape[0],0] - LM[0:LM.shape[0]-1,0])/fs
+    return LM
+
+
+# Old way of scoring - remove movements with too short IMI, then
+# recalculate IMI and see if it fits now. There's probably a way to
+# vectorize this for speed, but I honestly don't care, no one should use
+# this anymore.
+def removeShortIMI(CLM,params):
+    rc = 0
+    CLMt =np.array()
+    for rl in range(CLM.shape[0]):
+        if CLM[rl,3] >= params.minIMIDuration:
+            CLMt[rc,:] = CLM[rl,:]
+            rc = rc + 1
+        elif rl < CLM.shape[0]:
+            CLM[rl+1,3] = CLM[rl+1,3]+CLM[rl,3]
+
+    CLMt = getIMI(CLMt,params.fs)
+    return CLMt
+##########################################################################################
+##########################################################################################
+
+
+##########################################################################################
+##########################################################################################
+def calculateArousal(bCLM,leftBandData,rightBandData):
+    percentVal = 0.45
+    Arousal = bCLM[:,[0,1]]
+    
+    if len(leftBandData) != 0:    
+        leftrmsAcc = rms(removeAccGrav(leftBandData[:,7:10]))
+        leftrmsGyr = rms(leftBandData[:,10:13])
+    if len(rightBandData) != 0:
+        rightrmsAcc = rms(removeAccGrav(rightBandData[:,7:10]))
+        rightrmsGyr = rms(rightBandData[:,10:13])
+    
+    DurationArr = bCLM[:,2]
+    CLM_OR_PLM = bCLM[:,4]
+   
+    AUCArr = []
+    MAXActivityArr = []
+    GYRORMS_AUCArr = []
+    GYRORMS_MAXActivityArr = []
+    GYROX_AUCArr = []
+    GYROX_MAXActivityArr = []
+    GYROY_AUCArr = []
+    GYROY_MAXActivityArr = []
+    GYROZ_AUCArr = []
+    GYROZ_MAXActivityArr = []
+    ACC_STD_Arr = []
+    GYRO_STD_Arr = []
+    CAP1_STD_Arr = []
+    CAP2_STD_Arr = []
+    CAP3_STD_Arr = []
+    
+    for i in range(bCLM.shape[0]):
+        print(i)
+        if bCLM[i,12] == 2:
+            AUCArr.append(np.sum(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            MAXActivityArr.append(np.max(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRORMS_AUCArr.append(np.sum(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRORMS_MAXActivityArr.append(np.max(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]))  
+            GYROX_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
+            GYROX_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
+            GYROY_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
+            GYROY_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]))  
+            GYROZ_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
+            GYROZ_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
+            ACC_STD_Arr.append(np.std(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRO_STD_Arr.append(np.std(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            CAP1_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])) 
+            CAP2_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])) 
+            CAP3_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),6])) 
+        elif bCLM[i,12] == 1:
+            AUCArr.append(np.sum(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]))
+            MAXActivityArr.append(np.max(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRORMS_AUCArr.append(np.sum(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRORMS_MAXActivityArr.append(np.max(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYROX_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
+            GYROX_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
+            GYROY_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
+            GYROY_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
+            GYROZ_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
+            GYROZ_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
+            ACC_STD_Arr.append(np.std(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            GYRO_STD_Arr.append(np.std(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
+            CAP1_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])) 
+            CAP2_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])) 
+            CAP3_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),6]))
+        else:
+            AUCArr.append(np.mean([np.sum(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.sum(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            MAXActivityArr.append(np.mean([np.max(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.max(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            GYRORMS_AUCArr.append(np.mean([np.sum(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.sum(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            GYRORMS_MAXActivityArr.append(np.mean([np.max(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.max(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            GYROX_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])])) 
+            GYROX_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])])) 
+            GYROY_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])])) 
+            GYROY_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])])) 
+            GYROZ_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])])) 
+            GYROZ_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])])) 
+            ACC_STD_Arr.append(np.mean([np.std(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.std(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            GYRO_STD_Arr.append(np.mean([np.std(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.std(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
+            CAP1_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),4]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])])) 
+            CAP2_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),5]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])])) 
+            CAP3_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),6]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),6])])) 
+
+        print("calculated values:")
+        print(AUCArr[i])
+        print(MAXActivityArr[i])
+        print(GYRORMS_AUCArr[i])
+        print(GYRORMS_MAXActivityArr[i])
+        print(GYROX_AUCArr[i])
+        print(GYROX_MAXActivityArr[i])
+        print(GYROY_AUCArr[i])
+        print(GYROY_MAXActivityArr[i])
+        print(GYROZ_AUCArr[i])
+        print(GYROZ_MAXActivityArr[i])
+        print(ACC_STD_Arr[i])
+        print(GYRO_STD_Arr[i])
+        print(CAP1_STD_Arr[i])
+        print(CAP2_STD_Arr[i])
+        print(CAP3_STD_Arr[i])
+
+        val = LRplot(DurationArr[i],AUCArr[i],MAXActivityArr[i],GYRORMS_AUCArr[i],GYRORMS_MAXActivityArr[i],GYROX_AUCArr[i],GYROX_MAXActivityArr[i],GYROY_AUCArr[i],GYROY_MAXActivityArr[i],GYROZ_AUCArr[i],GYROZ_MAXActivityArr[i],ACC_STD_Arr[i],GYRO_STD_Arr[i],CAP1_STD_Arr[i],CAP2_STD_Arr[i],CAP3_STD_Arr[i],CLM_OR_PLM[i])
+        
+
+def removeAccGrav(accel):
+    k = 0.2
+    g = np.zeros(accel.shape)    
+    g[1:g.shape[0],:] = k * accel[1:accel.shape[0],:] + (1-k) * accel[0:accel.shape[0]-1,:]
+    accel = accel - g
+    accel[0,:] = np.zeros(accel.shape[1])
+    return accel
+
+def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,val14,val15,val16,val17):
+    val =[]
+    return val
+
+
 ##########################################################################################
 ##########################################################################################
 
