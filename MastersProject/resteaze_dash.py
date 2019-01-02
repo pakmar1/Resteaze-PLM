@@ -585,6 +585,7 @@ def calculateArousal(bCLM,leftBandData,rightBandData):
     CAP2_STD_Arr = []
     CAP3_STD_Arr = []
     
+    arousal_col_2 = np.array(Arousal.shape[0])
     for i in range(bCLM.shape[0]):
         print(i)
         if bCLM[i,12] == 2:
@@ -635,7 +636,7 @@ def calculateArousal(bCLM,leftBandData,rightBandData):
             CAP1_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),4]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])])) 
             CAP2_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),5]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])])) 
             CAP3_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),6]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),6])])) 
-
+        """
         print("calculated values:")
         print(AUCArr[i])
         print(MAXActivityArr[i])
@@ -652,9 +653,18 @@ def calculateArousal(bCLM,leftBandData,rightBandData):
         print(CAP1_STD_Arr[i])
         print(CAP2_STD_Arr[i])
         print(CAP3_STD_Arr[i])
-
+        """
         val = LRplot(DurationArr[i],AUCArr[i],MAXActivityArr[i],GYRORMS_AUCArr[i],GYRORMS_MAXActivityArr[i],GYROX_AUCArr[i],GYROX_MAXActivityArr[i],GYROY_AUCArr[i],GYROY_MAXActivityArr[i],GYROZ_AUCArr[i],GYROZ_MAXActivityArr[i],ACC_STD_Arr[i],GYRO_STD_Arr[i],CAP1_STD_Arr[i],CAP2_STD_Arr[i],CAP3_STD_Arr[i],CLM_OR_PLM[i])
-        
+        np.append(arousal_col_2,val>percentVal)
+    print("dim")
+    print(Arousal.shape)
+    print(arousal_col_2.shape)
+    Arousal = np.append(Arousal, arousal_col_2, 1)
+
+    print("Arousal")
+    print(Arousal)
+    
+    return Arousal
 
 def removeAccGrav(accel):
     k = 0.2
@@ -665,8 +675,32 @@ def removeAccGrav(accel):
     return accel
 
 def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,val14,val15,val16,val17):
-    val =[]
-    return val
+    
+    coefficients = [-7.26071921174945,-1.63495844368173,4.12112328164108e-06,0.000307550213228846,-2.25291668515951e-06,-0.000296449861658441,-4.25363370848999e-06,-7.11370115182980e-05,-6.21629692944963e-06,0.000111605764350175,7.33668581844596e-07,0.000388852009829072,-0.00199518504774808,0.00370318074433064,9.46982846482890e-06,0.000100640871621468,-1.07690156038127e-05,-0.423981247009446]
+    
+    Intercept=  coefficients[0]
+    duration=  coefficients[1]
+    AUC=  coefficients[2]
+    MAX_Activity= coefficients[3]
+    GYRORMS_AUC=  coefficients[4]
+    GYRORMS_MAX_Activity= coefficients[5]
+    GYROX_AUC=  coefficients[6]
+    GYROX_MAX_Activity= coefficients[7]
+    GYROY_AUC=  coefficients[8]
+    GYROY_MAX_Activity= coefficients[9]
+    GYROZ_AUC=  coefficients[10]
+    GYROZ_MAX_Activity= coefficients[11]
+    ACC_STD=  coefficients[12]
+    GYRO_STD= coefficients[13]
+    CAP1_STD=  coefficients[14]
+    CAP2_STD=  coefficients[15]
+    CAP3_STD=  coefficients[16]
+    CLM_OR_PLM = coefficients[17]
+    
+    val = Intercept+ (duration*val1) + (AUC*val2) + (val3*MAX_Activity) + (GYRORMS_AUC*val4) + (val5*GYRORMS_MAX_Activity) + (GYROX_AUC*val6) + (val7*GYROX_MAX_Activity) + (GYROY_AUC*val8) + (val9*GYROY_MAX_Activity) + (GYROZ_AUC*val10) + (val11*GYROZ_MAX_Activity) + (ACC_STD*val12) + (val13*GYRO_STD)+ (CAP1_STD*val14) + (val15*CAP2_STD)+ (CAP3_STD*val16)+(CLM_OR_PLM*val17)
+    output_val = (np.exp(val)/(1+np.exp(val)))
+
+    return output_val
 
 
 ##########################################################################################
