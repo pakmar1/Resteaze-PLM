@@ -65,7 +65,10 @@ def resteaze_dash(left,right,subjectid):
 
     """ Start Patrick's standard scoring stuff """
     bCLM = candidate_lms(rLM,lLM,params)
-    calculateArousal(bCLM,leftLeg,rightLeg)
+    Arousal = calculateArousal(bCLM,leftLeg,rightLeg)
+    output.Arousal = Arousal[Arousal[:,2]==1,:]
+    bCLM[:,10] = Arousal[:,2]
+    PLM, bCLM = periodic_lms(bCLM,params)
 
 
     #################################################
@@ -155,7 +158,9 @@ def rms(x):
 
 ########################################################################################
 ########################################################################################
-""" this LM calculation """
+""" LM calculation """
+########################################################################################
+
 def getLMiPod(paramsiPod,RMS,up2Down1):
     print("start of: getLMiPod")
     if RMS[0] == None:
@@ -353,6 +358,7 @@ def calcDistToRun(run,position):
         length = -1
         dist = -1
     return dist,length
+
 ########################################################################################
 ########################################################################################
 
@@ -379,7 +385,7 @@ def calcDistToRun(run,position):
 def candidate_lms(rLM,lLM,params):
     CLM=[]
     if rLM.size != 0 and lLM.size != 0:
-        print("both full")
+        #print("both full")
         # Reduce left and right LM arrays to exclude too long movements, but add
         # breakpoints to the following movement
         rLM[:,2] = (rLM[:,1]-rLM[:,0])/params.fs
@@ -393,7 +399,8 @@ def candidate_lms(rLM,lLM,params):
 
         # Combine left and right and sort.
         CLM = rOV2(lLM,rLM,params.fs)
-
+        #print("CLM after rOV2")
+        #print(CLM)
     elif lLM.size != 0:
         print("left is full")
         lLM[:,2] = (lLM[:,1] - lLM[:,0])/params.fs
@@ -424,7 +431,7 @@ def candidate_lms(rLM,lLM,params):
     # is rejected, and a breakpoint is placed on the next movement. When
     # inspecting IMI of CLM later, movements with the bp code 4 will be
     # excluded because IMI is disrupted by a too-long LM
-    contains_too_long = find(CLM[:,8],lambda x: x ==4)
+    contains_too_long = find(CLM[:,8],lambda x: x == 4)
     for i in range(len(contains_too_long)):
         CLM[contains_too_long[i]+1,8] = 4
     CLM = np.delete(CLM,contains_too_long,0)
@@ -448,8 +455,6 @@ def candidate_lms(rLM,lLM,params):
 
     CLM[col_9_cmbd,8] =  5 # too many cmbd mvmts
 
-    print("CLM before")
-    print(CLM.shape)
     for value in range(CLM.shape[0]):
         if CLM[value,3] > params.maxbCLMOverlap or CLM[value,2] > params.maxbCLMDuration:
             np.delete(CLM,value,0)
@@ -457,7 +462,7 @@ def candidate_lms(rLM,lLM,params):
     CLM[:,3] = np.zeros(CLM.shape[0]) # clear out the #combined mCLM
 
     # If there are no CLM, return an empty vector
-    if CLM.size == 0:
+    if CLM.size != 0:
         # Add IMI (col 4), sleep stage (col
         # 6). Col 5 is reserved for PLM marks later
         CLM = getIMI(CLM, params.fs)
@@ -466,7 +471,7 @@ def candidate_lms(rLM,lLM,params):
         # I believe we also need a breakpoint after this movement, so that a
         # short IMI cannot begin a run of PLM
         if params.iLMbp == 'on':
-            CLM[CLM[:,3] < params.minIMIDuration, 9] = 2 #short IMI
+            CLM[CLM[:,3] < params.minIMIDuration, 8] = 2 #short IMI
         else:
             CLM = removeShortIMI(CLM,params)
         
@@ -478,12 +483,13 @@ def candidate_lms(rLM,lLM,params):
         # The area of the leg movement should go here. However, it is not
         # currently well defined in the literature for combined legs, and we
         # have omitted it temporarily
-        CLM[:,9:11] = np.zeros(CLM.shape[0])
-
+        CLM[:,9] = np.zeros(CLM.shape[0])
+        CLM[:,10] = np.zeros(CLM.shape[0])
+        CLM[:,11] = np.zeros(CLM.shape[0])
         # 3 add breakpoints if IMI > 90 seconds (standard)    
         CLM[CLM[:,3] > params.maxIMIDuration,8] = 1
-        print("CLM out of candidate_lms():")
-        print(CLM)
+        #print("CLM out of candidate_lms():")
+        #print(CLM)
     return CLM
 
 def rOV2(lLM,rLM,fs):
@@ -539,12 +545,12 @@ def getIMI(LM,fs):
 # this anymore.
 def removeShortIMI(CLM,params):
     rc = 0
-    CLMt =np.array()
+    CLMt =[]
     for rl in range(CLM.shape[0]):
         if CLM[rl,3] >= params.minIMIDuration:
             CLMt[rc,:] = CLM[rl,:]
             rc = rc + 1
-        elif rl < CLM.shape[0]:
+        elif rl < CLM.shape[0]-1:
             CLM[rl+1,3] = CLM[rl+1,3]+CLM[rl,3]
 
     CLMt = getIMI(CLMt,params.fs)
@@ -555,6 +561,8 @@ def removeShortIMI(CLM,params):
 
 ##########################################################################################
 ##########################################################################################
+""" calculating Arousal """
+
 def calculateArousal(bCLM,leftBandData,rightBandData):
     percentVal = 0.45
     Arousal = bCLM[:,[0,1]]
@@ -585,9 +593,8 @@ def calculateArousal(bCLM,leftBandData,rightBandData):
     CAP2_STD_Arr = []
     CAP3_STD_Arr = []
     
-    arousal_col_2 = np.array(Arousal.shape[0])
+    arousal_col_2 = []
     for i in range(bCLM.shape[0]):
-        print(i)
         if bCLM[i,12] == 2:
             AUCArr.append(np.sum(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
             MAXActivityArr.append(np.max(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
@@ -655,15 +662,8 @@ def calculateArousal(bCLM,leftBandData,rightBandData):
         print(CAP3_STD_Arr[i])
         """
         val = LRplot(DurationArr[i],AUCArr[i],MAXActivityArr[i],GYRORMS_AUCArr[i],GYRORMS_MAXActivityArr[i],GYROX_AUCArr[i],GYROX_MAXActivityArr[i],GYROY_AUCArr[i],GYROY_MAXActivityArr[i],GYROZ_AUCArr[i],GYROZ_MAXActivityArr[i],ACC_STD_Arr[i],GYRO_STD_Arr[i],CAP1_STD_Arr[i],CAP2_STD_Arr[i],CAP3_STD_Arr[i],CLM_OR_PLM[i])
-        np.append(arousal_col_2,val>percentVal)
-    print("dim")
-    print(Arousal.shape)
-    print(arousal_col_2.shape)
-    Arousal = np.append(Arousal, arousal_col_2, 1)
-
-    print("Arousal")
-    print(Arousal)
-    
+        arousal_col_2 = np.append(arousal_col_2, np.array(val > percentVal))
+    Arousal = np.insert(Arousal,2, arousal_col_2, 1)    
     return Arousal
 
 def removeAccGrav(accel):
@@ -705,6 +705,138 @@ def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,
 
 ##########################################################################################
 ##########################################################################################
+
+
+##########################################################################################
+##########################################################################################
+""" periodic_lms()::
+
+%% PLM = periodic_lms(CLM,params)
+%  find periodic leg movements from the array of CLM. Can either ignore
+%  intervening LMs or add breakpoints. Contains subfunctions for ignoring
+%  iLMs, restructuring breakpoint locations to find PLM runs and marking
+%  the CLM which occur in periodic series.
+
+% Create CLMt array of all CLM with IMI greater than the minimum allowable
+% if intervening lm option is not selected, we remove CLMs whose IMI are
+% too short. Really, new standards say that these should always be
+% breakpoint, so the first case is only for posterity. """
+def periodic_lms(CLM,params):
+    if params.iLMbp != 'on':
+        CLMt = removeShortIMI_periodic(CLM,params.minIMIDuration,params.fs)
+    else:
+        CLMt = CLM
+ 
+    CLMt[:,4] = np.zeros(CLMt.shape[0]) # Restart PLM
+    BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
+    CLMt = markPLM3(CLMt,BPloct)
+
+    print("CLMt after markPLM3()")
+    print(CLMt)
+
+    PLM = []
+    for i in range(CLMt.shape[0]):
+        if CLMt[i,4] == 1:
+            PLM = np.append(PLM,CLMt[i,:],0)
+    print("PLM after markPLM3()")
+    print(PLM)
+
+    return PLM, CLMt
+##########################################################################################
+
+"""
+%% CLMt = removeShortIMI(CLM,minIMIDuration,fs)
+% This function removes CLM with IMI that are too short to be considered
+% PLM. This is according to older standards, and hopefully this code will
+% not be necessary in the future.
+"""
+def removeShortIMI_periodic(CLM,minIMIDuration,fs):
+    i = 2 #skip the first movement
+    CLMt = CLM
+    while i < CLMt.shape[0]:
+        if CLMt[i,3] >= minIMIDuration:
+            i = i + 1
+        else:
+            CLMt = np.delete(CLMt,i,0)
+            CLMt[i,3] = (CLMt[i,0] - CLMt[i-1,0])/fs
+    return CLMt
+
+
+##########################################################################################
+"""
+%% BPloc = BPlocAndRunsArray(CLM,minNumIMI)
+%  col 1: Break point location
+%  col 2: Number of leg movements
+%  col 3: PLM =1, no PLM = 0
+%  col 4: #LM if PLM
+% This is really only for internal use, nobody wants to look at this BPloc
+% array, but it is necessary to get our PLM. """
+def BPlocAndRunsArray(CLM,minNumIMI):
+    print("BPlocAndRunsArray()")
+    #print("CLM")
+    #print(CLM)
+    
+    col_1 = find(CLM[:,8],lambda x: x != 0) # BP locations
+    print(col_1)
+    print("BPloc")
+    BPloc = np.empty([len(col_1),0])
+    print(BPloc)
+    BPloc = np.insert(BPloc,0,col_1,1)
+    
+
+    # Add number of movements until next breakpoint to column 2
+    col_2 = []
+    for i in range(BPloc.shape[0]-1):
+        col_2.append(BPloc[i+1,0] - BPloc[i,0])
+    col_2.append(CLM.shape[0] - BPloc[BPloc.shape[0]-1,0])
+    print("col_2")
+    print(col_2)
+
+    BPloc = np.insert(BPloc,1,col_2,1)
+
+    # Mark whether a run of LM meets the minimum requirement for number of IMI
+    col_3 = []
+    for i in range(BPloc.shape[0]):
+        col_3.append(BPloc[i,1] > minNumIMI)
+    BPloc = np.insert(BPloc,2,col_3,1)
+    print(col_3)
+
+    # Mark the number of movements in each PLM series
+    col_4 = []
+    for i in range(BPloc.shape[0]):
+        if BPloc[i,2] == 1:
+            col_4.append(BPloc[i,1])
+        else:
+            col_4.append(0)    
+        
+    BPloc = np.insert(BPloc,3,col_4,1)
+
+    return BPloc
+
+##########################################################################################
+"""
+%% CLM = markPLM3(CLM,BPloc,fs)
+% places a 1 in column 5 for all movements that are part of a run
+% of PLM. Again, used internally, you'll never really need to run this
+% independent of periodic_lms.
+"""
+def markPLM3(CLM,BPloc):
+    bpPLM = []
+    for i in range(BPloc.shape[0]):
+        if BPloc[i,2] == 1:
+            bpPLM.append(BPloc[i,:])
+    
+
+    if len(bpPLM) > 0:
+        for i in range(len(bpPLM)):
+            CLM[bpPLM[i,0]:bpPLM[i,0]+bpPLM[i,1]-1,4] = 1
+
+    return CLM
+
+##########################################################################################
+##########################################################################################
+
+
 
 
 if __name__ == '__main__':
