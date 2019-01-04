@@ -12,6 +12,9 @@ class Output:
 class nightData:
     pass
 
+class WASO:
+    pass
+
 def resteaze_dash(left,right,subjectid):
 
     params = init_params()
@@ -80,6 +83,7 @@ def resteaze_dash(left,right,subjectid):
     #################################################
     """  score sleep/wake """
     output.wake = scoreSleep(params.fs,output.lRMS,PLM,bCLM)
+    calculateWASO_RE(output.wake,params.minSleepTime,params.fs); # NEED TO UPDATE OUTPUT MATRICES AFTER HERE
 
     
     #################################################
@@ -867,7 +871,7 @@ def scoreSleep(fs,RMS,LM,GLM):
     #print("GLM")
     #print(GLM[0:GLM.shape[0],0])
 
-    print("concatenate")
+    #print("concatenate")
     if LM.size != 0:
         b = np.concatenate(LM[0:LM.shape[0],0],GLM[0:GLM.shape[0],0],axis=0)
     else:
@@ -925,15 +929,93 @@ def scoreSleep(fs,RMS,LM,GLM):
 
     if percentLM < 0.8:
         wake = (wakeLM&AccelRMS10epochmax)| AccelRMS2epochmax
-        print("condition tru")
     else:
         wake = wakeLM
-    print("wake ",wake)
+
     return wake
 
 
 ##########################################################################################
 ##########################################################################################
+
+##########################################################################################
+##########################################################################################
+""" 
+%WASO calculates the number of awakenings and total wake-after-sleep-onset duration.
+%
+%inputs (default values):
+%up2Down1=whether they are in sleep or not
+%minSleepTime=5 minutes
+%fs=20Hz
+%
+%outputs:
+%WASO.sleepStart=datapoint where sleep begins
+%WASO.num=number of times wake after sleep began
+%WASO.dur=total duration of wake after sleep began
+%WASO.avgdur=average duration of each waking period
+"""
+def calculateWASO_RE(wake,minSleepTime,fs):
+    wake = wake + 1 # convert it to 'up2down1' format ie if awake, wake ==2 else  wake==1
+    minSleepTime = minSleepTime * 60 * fs # convert from minutes to datapoints
+
+    # If they were never awake record number and duration at 0.
+    if sum(wake == 2) == 0:
+        WASO.sleepStart = 1
+        WASO.num = 0
+        WASO.dur = 0
+        WASO.avgdur = 0
+    elif sum(wake == 1) == 0: # If they were always awake record number and duration at NaN.
+        WASO.sleepStart = None
+        WASO.num = None
+        WASO.dur = None
+        WASO.avgdur = None
+    else:
+        sleepBreakPoints = np.insert(abs(np.diff(wake)), 0, 1)   # 1 when fall asleep/wake up
+        
+        runStart = find(sleepBreakPoints, lambda x: x==1) 
+        #print("runStart 1",runStart)
+        runLength = []
+        for i in range(len(runStart)-1):
+            runLength.append(runStart[i+1] - runStart[i])   # Assumes next break point is immediately after the last row
+        
+        last = len(wake)-(runStart[-1]+2)
+        runLength.append(last)
+
+        #print("runlength 1",runLength)
+        nums = []
+        for i in range(len(runLength)):
+            nums.append(runLength[i] >= minSleepTime and wake[runStart[i]] == 1) 
+        
+        sleepStart = runStart[find(nums,lambda x: x == 1)[0]]
+        WASO.sleepStart = sleepStart
+
+        # RunStart is now all runs from start of sleep
+        runStart = []
+        runStart_lst = find(sleepBreakPoints[sleepStart:len(sleepBreakPoints)],lambda x: x == 1)
+        for j in range(len(runStart_lst)):
+            runStart.append(runStart_lst[j]  + sleepStart )
+        #print("runStart 2",runStart)
+        runLength = []
+        for i in range(len(runStart)-1):
+            runLength.append(runStart[i+1] - runStart[i])   # Assumes next break point is immediately after the last row
+        
+        last = len(wake)-(runStart[-1])
+        runLength.append(last)
+        #print("runLength 2",runLength)
+
+        WASO.sleepStart = sleepStart
+        WASO.num = sum(wake[runStart]==2)
+        print("WASO num ",WASO.num)
+        
+        ##
+        WASO.dur=sum(runLength[wake[runStart]==2])/fs/60
+        WASO.avgdur=mean(runLength[wake[runStart]==2])/fs/60
+        ##
+    return WASO
+##########################################################################################
+##########################################################################################
+
+
 
 if __name__ == '__main__':
     resteaze_dash(sys.argv[1],sys.argv[2],sys.argv[3])
