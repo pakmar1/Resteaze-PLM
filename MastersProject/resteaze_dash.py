@@ -19,17 +19,23 @@ def resteaze_dash(left,right,subjectid):
 
     if os.path.exists(left):
         leftPath = os.path.splitext(left)[0]
-
-        leftFileNames = os.path.splitext(left)[1]
+        #leftFileNames = os.path.splitext(left)[1]
         ext = os.path.splitext(left)[1]
 
         print("leftpath: "+leftPath)
-        print("leftFileNames: "+leftFileNames)
+        #print("leftFileNames: "+leftFileNames)
         print("ext: "+ext)       
     else:
         print("lefterror")
     if os.path.exists(right):
-        print("right")    
+        
+        rightPath = os.path.splitext(right)[0]
+        #rightFileNames = os.path.splitext(right)[1]
+        right_ext = os.path.splitext(right)[1]
+        print("rightpath: " + rightPath)
+        #print("rightFileNames: " + rightFileNames)
+        print("right ext: " + right_ext)     
+
     else:
         print("righterror")
 
@@ -39,23 +45,23 @@ def resteaze_dash(left,right,subjectid):
 
     """synching signals from two legs"""
     leftLeg,rightLeg = syncRE(bandData_left,bandData_right)
-    print("leftleg,rightleg after syncRE: ")
-    print(leftLeg.shape[0])
-    print(rightLeg.shape[0])
+    #print("leftleg,rightleg after syncRE: ")
+    #print(leftLeg.shape[0])
+    #print(rightLeg.shape[0])
 
     output.up2Down1 = np.ones((leftLeg.shape[0],1)) 
     
-    print("dimension going in for rms")
-    print(leftLeg[:,[1,2,3]].shape)
+    #print("dimension going in for rms")
+    #print(leftLeg[:,[1,2,3]].shape)
     #################################################
 
     """calculating root-mean-square of the acclerometer movements for both legs"""
     output.lRMS = rms(leftLeg[:,[1,2,3]])
     output.rRMS = rms(rightLeg[:,[1,2,3]])
 
-    print("output of rms:")
-    print(output.lRMS.shape)
-    print(output.rRMS.shape)
+    #print("output of rms:")
+    #print(output.lRMS.shape)
+    #print(output.rRMS.shape)
     #################################################
     
     """ compute LM(leg movement)"""
@@ -72,6 +78,12 @@ def resteaze_dash(left,right,subjectid):
 
 
     #################################################
+    """  score sleep/wake """
+    output.wake = scoreSleep(params.fs,output.lRMS,PLM,bCLM)
+
+    
+    #################################################
+
 
 def init_output(subjectid):
     output = Output()
@@ -105,11 +117,11 @@ def init_params():
     params.maxbCLMOverlap=4
     params.maxbCLMDuration=15
     params.side='both'
-    print("params initialized")
+    #print("params initialized")
     return params
 
 def syncRE(leftLeg,rightLeg):
-    print("in syncRE")
+    #print("in syncRE")
     leftLegsize = leftLeg.shape[0]
     rightLegsize = rightLeg.shape[0]
     
@@ -167,9 +179,11 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
         LM = None
         return
     LM = findIndices(RMS,paramsiPod.lowThreshold,paramsiPod.highThreshold,paramsiPod.minLowDuration,paramsiPod.minHighDuration,paramsiPod.fs)
-    print("end of: getLMiPod")
+    
     if LM.size == 0:
         return
+    
+
     #%% Median must pass lowthreshold
     if paramsiPod.morphologyCriteria == 'on':
         LM = cutLowMedian(RMS,LM,paramsiPod.lowThreshold,paramsiPod.fs)
@@ -220,6 +234,7 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     LM = np.insert(LM,9,values=col_10,axis=1)
     #print("final LM:")
     #print(LM)
+    print("end of: getLMiPod")
     return LM
 #########################################################
 
@@ -731,15 +746,15 @@ def periodic_lms(CLM,params):
     BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
     CLMt = markPLM3(CLMt,BPloct)
 
-    print("CLMt after markPLM3()")
-    print(CLMt)
+    #print("CLMt after markPLM3()")
+    #print(CLMt)
 
     PLM = []
     for i in range(CLMt.shape[0]):
         if CLMt[i,4] == 1:
             PLM = np.append(PLM,CLMt[i,:],0)
-    print("PLM after markPLM3()")
-    print(PLM)
+    #print("PLM after markPLM3()")
+    #print(PLM)
 
     return PLM, CLMt
 ##########################################################################################
@@ -772,15 +787,15 @@ def removeShortIMI_periodic(CLM,minIMIDuration,fs):
 % This is really only for internal use, nobody wants to look at this BPloc
 % array, but it is necessary to get our PLM. """
 def BPlocAndRunsArray(CLM,minNumIMI):
-    print("BPlocAndRunsArray()")
+    #print("BPlocAndRunsArray()")
     #print("CLM")
     #print(CLM)
     
     col_1 = find(CLM[:,8],lambda x: x != 0) # BP locations
-    print(col_1)
-    print("BPloc")
+    #print(col_1)
+    #print("BPloc")
     BPloc = np.empty([len(col_1),0])
-    print(BPloc)
+    #print(BPloc)
     BPloc = np.insert(BPloc,0,col_1,1)
     
 
@@ -789,8 +804,8 @@ def BPlocAndRunsArray(CLM,minNumIMI):
     for i in range(BPloc.shape[0]-1):
         col_2.append(BPloc[i+1,0] - BPloc[i,0])
     col_2.append(CLM.shape[0] - BPloc[BPloc.shape[0]-1,0])
-    print("col_2")
-    print(col_2)
+    #print("col_2")
+    #print(col_2)
 
     BPloc = np.insert(BPloc,1,col_2,1)
 
@@ -799,7 +814,7 @@ def BPlocAndRunsArray(CLM,minNumIMI):
     for i in range(BPloc.shape[0]):
         col_3.append(BPloc[i,1] > minNumIMI)
     BPloc = np.insert(BPloc,2,col_3,1)
-    print(col_3)
+    #print(col_3)
 
     # Mark the number of movements in each PLM series
     col_4 = []
@@ -837,7 +852,88 @@ def markPLM3(CLM,BPloc):
 ##########################################################################################
 
 
+##########################################################################################
+##########################################################################################
 
+def scoreSleep(fs,RMS,LM,GLM):
+    #Calculate numLMper10epochs - the number of GLM+LM per 10 epochs
+    dataPtsPerWindow=30*10*fs
+    numWindows = np.ceil(RMS.shape[0]/dataPtsPerWindow)
+    
+    LM = np.array(LM)
+    GLM = np.array(GLM)
+    #print("LM")
+    #print(LM[0:LM.shape[0],0])
+    #print("GLM")
+    #print(GLM[0:GLM.shape[0],0])
+
+    print("concatenate")
+    if LM.size != 0:
+        b = np.concatenate(LM[0:LM.shape[0],0],GLM[0:GLM.shape[0],0],axis=0)
+    else:
+        b = GLM[0:GLM.shape[0],0]
+
+    xy = np.arange(0,numWindows*dataPtsPerWindow+1,dataPtsPerWindow)
+    numLMper10epochs = np.histogram(b,xy)[0]
+    
+    # wakeLM is a logical vector indicating whether there is at least 1 GLM,LM in
+    # the 10 epochwindow that the current dataPt is in (0=there is LM, 1= no LM) 1 corresponds to wake.
+    wakeLM = np.zeros(RMS.shape[0])
+    
+    for i in range(0,int(numWindows)-1):
+        start = (i)*dataPtsPerWindow+1
+        end = (i+1)*dataPtsPerWindow
+        wakeLM[start-1:end] = numLMper10epochs[i] * np.ones(dataPtsPerWindow)
+    start = end+1
+    end = RMS.shape[0]
+    
+    wakeLM[start-1:end] = numLMper10epochs[int(numWindows)-1] * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
+    
+
+    wakeLM = wakeLM == 0
+
+    # Acceleration stuff
+    AccelRMS10epochmax = np.zeros(RMS.shape[0])
+    for i in range(0,int(numWindows)-1):
+        start = (i)*dataPtsPerWindow+1
+        end = (i+1)*dataPtsPerWindow
+        AccelRMS10epochmax[start-1:end] = np.max(RMS[start-1:end]) * np.ones(dataPtsPerWindow)
+    start = end + 1
+    end = RMS.shape[0]
+    AccelRMS10epochmax[start-1:end] = np.max(RMS[(int(numWindows)-1)*dataPtsPerWindow+1:int(numWindows)*dataPtsPerWindow]) * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
+    
+    AccelRMS10epochmax = AccelRMS10epochmax > 0.15
+    # if the max in that 10 epoch window is <.15 then there is no activity and
+    # we record sleep, vice versa for wake
+
+    # if the max in the 2 epoch window is >.5 then we record wake, even if prior
+    # LM criteria recorded sleep.
+    dataPtsPerWindow = 30 * 2 * fs
+    numWindows = np.ceil(RMS.shape[0]/dataPtsPerWindow)
+    AccelRMS2epochmax = np.zeros(RMS.shape[0])
+    for i in range(0,int(numWindows)-1):        
+        start = (i)*dataPtsPerWindow+1
+        end = (i+1)*dataPtsPerWindow
+        AccelRMS2epochmax[start-1:end] = np.max(RMS[start-1:end]) * np.ones(dataPtsPerWindow)
+    start = end + 1
+    end = RMS.shape[0]
+    AccelRMS2epochmax[start-1:end] = np.max(RMS[(int(numWindows)-1)*dataPtsPerWindow+1:int(numWindows)*dataPtsPerWindow]) * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
+    AccelRMS2epochmax = AccelRMS2epochmax > 0.5
+
+    # Only if <80% of epochs have LM, include accelerometer criteria
+    percentLM = 1 - (sum(wakeLM)/wakeLM.shape[0])
+
+    if percentLM < 0.8:
+        wake = (wakeLM&AccelRMS10epochmax)| AccelRMS2epochmax
+        print("condition tru")
+    else:
+        wake = wakeLM
+    print("wake ",wake)
+    return wake
+
+
+##########################################################################################
+##########################################################################################
 
 if __name__ == '__main__':
     resteaze_dash(sys.argv[1],sys.argv[2],sys.argv[3])
