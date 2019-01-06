@@ -1,22 +1,21 @@
 import sys
 import os
 import numpy as np
+import datetime
 from numpy import mean, sqrt, square
+from utilities import Param, Output, nightData, WASO, sleepText, rms, find
+from syncRE import syncRE
+from getLMiPod import getLMiPod
+from candidate_lms import candidate_lms
+from scoreSleep import scoreSleep
+from calculateArousal import calculateArousal
+from periodic_lms import periodic_lms
+from calculateWASO_RE import calculateWASO_RE
 
-class Param:
-    pass
-
-class Output:
-    pass
-
-class nightData:
-    pass
-
-class WASO:
-    pass
+########################################################################################
 
 def resteaze_dash(left,right,subjectid):
-
+    
     params = init_params()
     output = init_output(subjectid)
 
@@ -54,8 +53,6 @@ def resteaze_dash(left,right,subjectid):
 
     output.up2Down1 = np.ones((leftLeg.shape[0],1)) 
     
-    #print("dimension going in for rms")
-    #print(leftLeg[:,[1,2,3]].shape)
     #################################################
 
     """calculating root-mean-square of the acclerometer movements for both legs"""
@@ -68,8 +65,8 @@ def resteaze_dash(left,right,subjectid):
     #################################################
     
     """ compute LM(leg movement)"""
-    rLM=getLMiPod(params,output.rRMS,output.up2Down1)
-    lLM=getLMiPod(params,output.rRMS,output.up2Down1)
+    rLM = getLMiPod(params,output.rRMS,output.up2Down1)
+    lLM = getLMiPod(params,output.rRMS,output.up2Down1)
     #################################################
 
     """ Start Patrick's standard scoring stuff """
@@ -78,22 +75,199 @@ def resteaze_dash(left,right,subjectid):
     output.Arousal = Arousal[Arousal[:,2]==1,:]
     bCLM[:,10] = Arousal[:,2]
     PLM, bCLM = periodic_lms(bCLM,params)
-
-
     #################################################
+
     """  score sleep/wake """
     output.wake = scoreSleep(params.fs,output.lRMS,PLM,bCLM)
-    calculateWASO_RE(output.wake,params.minSleepTime,params.fs); # NEED TO UPDATE OUTPUT MATRICES AFTER HERE
-
+    WASO = calculateWASO_RE(output.wake,params.minSleepTime,params.fs) # NEED TO UPDATE OUTPUT MATRICES AFTER HERE
+    
+    rLM[:,5] = output.wake[np.array(rLM[:,0],dtype=int)]+1 # still using up2down1 format
+    lLM[:,5] = output.wake[np.array(lLM[:,0],dtype=int)]+1 # still using up2down1 format
+    bCLM[:,5] = output.wake[np.array(bCLM[:,0],dtype=int)]+1 # still using up2down1 format
+    #print("bcLM ",bCLM)
+    if len(PLM) != 0:
+        PLM[:,5] = output.wake[np.array(PLM[:,0],dtype=int)]+1 # still using up2down1 format
+        #print("PLM 5",PLM)
+    else:
+        PLM = []
+    #################################################
+    """ Matrices to output """
+    output.rLM = rLM
+    output.lLM = lLM
+    
+    output.bCLM = bCLM
+    output.PLM = PLM
+    output.PLMS = []
+    if len(PLM) != 0:
+        xx = find(PLM[:,5],lambda x: x==1)
+        output.PLMS = PLM[xx,:]
+        print("output.PLMS ",output.PLMS)
     
     #################################################
+    """ Quantitative measures to output """
 
+    output.TRT = output.up2Down1.shape[0]/(params.fs*60)
+    output.TST = output.TRT - WASO.dur
+    output.sleepEff = output.TST / output.TRT
+    output.WASOnum = WASO.num
+    output.WASOdur = WASO.dur
+    output.WASOavgdur = WASO.avgdur
+    if len(output.PLMS) != 0: #change this to !=0
+        output.PI = sum( np.array(output.PLMS[:,8]==0,dtype=int) ) / (output.bCLM.shape[0]-1)
+
+    output.avglogCLMSIMI = mean(np.log(bCLM[bCLM[:,5]==1,3]))
+    output.stdlogCLMSIMI = np.std(np.log(bCLM[bCLM[:,5]==1,3]))
+
+    #print("avglogCLMSIMI ",output.avglogCLMSIMI)
+    #print("stdlogCLMSIMI ",output.stdlogCLMSIMI)
+    
+    output.avgCLMSDuration = mean(bCLM[bCLM[:,5]==1,3])
+    output.stdCLMSDuration = np.std(bCLM[bCLM[:,5]==1,3])
+    #print("avgCLMSDuration ",output.avgCLMSDuration)
+    #print("stdCLMSDuration ",output.stdCLMSDuration)
+    
+    if len(PLM) != 0:
+        plm_5 = PLM[:,5] == 1 
+        plm_8 = PLM[:,8] == 0
+        plm_combi = PLM[plm_5|plm_8,3]
+
+        output.avglogPLMSIMI = mean(np.log(plm_combi))
+        output.stdlogPLMSIMI = np.std(np.log(plm_combi))
+
+        output.avgPLMSDuration = mean(PLM[PLM[:,5]==1,2])
+        output.stdPLMSDuration = np.std(PLM[PLM[:,5]==1,2])
+        
+
+    #print("avglogPLMSIMI ",output.avglogPLMSIMI)
+    #print("stdlogPLMSIMI ",output.stdlogPLMSIMI)
+
+    #print("avglogPLMSIMI ",output.avgPLMSDuration)
+    #print("stdlogPLMSIMI ",output.stdPLMSDuration)
+
+    output.CLMhr = bCLM.shape[0]/(output.TRT/60)
+    output.CLMShr = sum(bCLM[:,5]==1)/(output.TST/60)
+    output.CLMWhr = sum(bCLM[:,5]==2)/((output.TRT-output.TST)/60)
+    #print("CLMhr ",output.CLMhr)
+    #print("CLMShr ",output.CLMShr)
+    #print("CLMWhr ",output.CLMWhr)
+
+    if len(PLM) != 0:
+        output.PLMhr = len(PLM)/(output.TRT/60)
+        output.PLMShr = sum(PLM[:,5]==1)/(output.TST/60)
+        output.PLMWhr = sum(PLM[:,5]==2)/((output.TRT-output.TST)/60)
+    #print("PLMhr ",output.PLMhr)
+    #print("PLMShr ",output.PLMShr)
+    #print("PLMWhr ",output.PLMWhr)
+
+    output.CLMnum = bCLM.shape[0]
+    output.CLMSnum = sum(bCLM[:,5]==1)
+    output.CLMWnum = sum(bCLM[:,5]==2)
+    #print("CLMnum ",output.CLMnum)
+    #print("CLMSnum ",output.CLMSnum)
+    #print("CLMWnum ",output.CLMWnum)
+    if len(PLM) != 0: 
+        output.PLMnum = len(PLM)
+        output.PLMSnum = sum(PLM[:,5]==1)
+        output.PLMWnum = sum(PLM[:,6]==2)
+
+        output.PLMSArI = sum(output.PLMS[:,10])/(output.TST/60) # num plms arousals per hr of sleep
+    
+    output.GLM = bCLM[bCLM[:,4]==0,:]
+    #print("PLMSArI ",output.PLMSArI)
+    #print("GLM ",output.GLM.shape)
+
+    # some more stuff needed for report %%%%%%%%%%%
+
+    output.intervalSize = 1
+    #output.GLM = bCLM[bCLM[:,4]==0,:)
+    #output.Arousal = output.Arousal
+    output.fs = params.fs
+    output.pos = 2 * np.ones(leftLeg.shape[0]) #%%%%%%%%%%%%%%%%%%%%% ALL BACKSIDE RIGHT NOW SINCE NO POS VECTOR YET
+    output.ArI = output.Arousal.shape[0]/(output.TST/60)
+    output.PLMSI = output.PLMShr
+    #print("intervalSize ",output.intervalSize)
+    #print("pos ",output.pos)
+    #print("ArI ",output.ArI)
+    #print("PLMSI ",output.PLMSI)
+    #print("Arousal ",output.Arousal)
+    leftStart = datetime.datetime.fromtimestamp(leftLeg[0,3] / 1000)
+    leftStart = [leftStart.year, leftStart.month, leftStart.day, leftStart.hour, leftStart.minute, leftStart.second]
+    output.sleepStart = np.mod(leftStart[3]*60 + leftStart[4]- 12*60 , 24*60)
+    print("sleepStart ",output.sleepStart)
+    output.sleepEnd = output.sleepStart + output.TRT
+    print("sleepEnd ",output.sleepEnd)
+    output.date = str(leftStart[1])+ '/' +str(leftStart[2])+ '/'+ str(np.mod(leftStart[0],100))
+    print("date ",output.date)
+
+    output.SQ = 0
+    output.SQhrs = []
+
+    nightData = output
+
+    fileID = open(output.fileName+'.txt','w')
+    fileID.write('PatientID: '+ output.fileName+'\n')
+    fileID.write('Record Start: '+ sleepText(nightData.sleepStart)+'\n')
+    fileID.write('Record Stop: ' + sleepText(nightData.sleepEnd)+'\n')
+    fileID.write('Sleep Efficiency:  '+ '{:.2f}'.format(nightData.sleepEff)+'\n')
+    fileID.write('Total Sleep Time:  '+ '{:.2f}'.format(nightData.TST)+'\n')
+    fileID.write('PLMS/hr:  '+ '{:.2f}'.format(nightData.PLMShr)+'\n')
+    fileID.write('Arousals/hr:  '+ '{:.2f}'.format(nightData.ArI)+'\n')
+    fileID.write('Sleep Quality:  ' + '{:.2f}'.format(nightData.SQ)+'\n')
+    fileID.write('WASO: '+ '{:.2f}'.format(nightData.WASOdur)+'\n')
+    fileID.write('Sleep_quality_per_hr :')
+    for i in range(len(nightData.SQhrs)):
+        fileID.write(fileID+': '+'{:.2f}'.format(nightData.SQhrs[0,i])+'\n')
+    fileID.close()
+
+    print('PatientID: '+output.fileName)
+    print('Record Start: '+ sleepText(nightData.sleepStart))
+    print('Record Stop: ' + sleepText(nightData.sleepEnd))
+    print('Sleep Efficiency:  '+ str(nightData.sleepEff))
+    print('Total Sleep Time:  '+ str(nightData.TST))
+    print('PLMS/hr:  '+ str(nightData.PLMShr))
+    print('Arousals/hr:  '+ str(nightData.ArI))
+    print('Sleep Quality:  ' + str(nightData.SQ))
+    print('WASO: '+ str(nightData.WASOdur))
+    """
+    fprintf(fileID,'Sleep_quality_per_hr : ')
+    for ii=1:size(nightData(i).SQhrs,2)
+        fprintf(fileID, '%.2f ', nightData(i).SQhrs(1,ii));
+    end"""
+    
+########################################################################################
 
 def init_output(subjectid):
     output = Output()
-    output.filename = subjectid
+    output.fileName = subjectid
+    output.PI = 0
 
+    output.avglogCLMSIMI = None
+    output.stdlogCLMSIMI = None
+    output.avgCLMSDuration = None
+    output.stdCLMSDuration = None
+
+    output.avglogPLMSIMI = None
+    output.stdlogPLMSIMI = None
+    output.avgPLMSDuration = None 
+    output.stdPLMSDuration = None
+    
+    output.CLMhr = 0
+    output.CLMShr = 0
+    output.CLMWhr = 0
+    output.PLMhr = 0
+    output.PLMShr = 0
+    output.PLMWhr = 0
+
+    output.CLMnum = 0
+    output.CLMSnum = 0
+    output.CLMWnum = 0
+    output.PLMnum = 0
+    output.PLMSnum = 0
+    output.PLMWnum = 0
+
+    output.PLMSArI = 0
     return output
+########################################################################################
 
 def init_params():
     # Initialize default parameters, if we want to allow them to change, modify here.
@@ -123,60 +297,25 @@ def init_params():
     params.side='both'
     #print("params initialized")
     return params
-
-def syncRE(leftLeg,rightLeg):
-    #print("in syncRE")
-    leftLegsize = leftLeg.shape[0]
-    rightLegsize = rightLeg.shape[0]
-    
-    # start of sync
-    if leftLeg[0][3] > rightLeg[0][3]:
-        rightstart=0
-        for i in range(leftLegsize,-1,-1):
-            if leftLeg[0][3] <= rightLeg[0][3]:
-                rightstart = i
-        
-        if rightstart > 0:
-            rightLeg = rightLeg[rightstart:][:]
-        else:
-            rightstart = None
-
-    elif leftLeg[0][3] < rightLeg[0][3]:
-        leftstart = 0
-        for i in range(rightLegsize,-1,-1):
-            if leftLeg[i][3] >= rightLeg[0][3]:
-                leftstart = i
-        
-        if leftstart > 0:
-            leftLeg = leftLeg[leftstart:][:]
-        else:
-            leftstart = None
-    # end of sync
-    
-    #Just make the dimensions equal since sampling rate is the same and start time is synched
-    leftLegsize = leftLeg.shape[0]
-    rightLegsize = rightLeg.shape[0]
-
-    #Delete rows that come before the sync time
-    if leftLegsize > rightLegsize:
-        leftLeg = leftLeg[0:rightLegsize][:]
-        leftminusright = leftLeg[rightLegsize][3] - rightLeg[rightLegsize][3]
-    elif leftLegsize < rightLegsize:
-        rightLeg = rightLeg[0:leftLegsize][:]
-        leftminusright = rightLeg[leftLegsize][3] - rightLeg[leftLegsize][3]
-
-    return leftLeg,rightLeg
-
-def rms(x):
-    y = sqrt(mean(square(x),axis=1))
-    return y
+########################################################################################
 
 
 ########################################################################################
 ########################################################################################
-""" LM calculation """
+""" syncRE """
 ########################################################################################
 
+########################################################################################
+########################################################################################
+
+
+
+
+########################################################################################
+########################################################################################
+""" getLMiPod calculation """
+########################################################################################
+"""
 def getLMiPod(paramsiPod,RMS,up2Down1):
     print("start of: getLMiPod")
     if RMS[0] == None:
@@ -213,15 +352,13 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     LM_i = np.array(LM, dtype='i')
 
     # Convert beginning of LMs to mins in 7th Column
-    LM = np.insert(LM,6,values = LM_i[:,0]/(paramsiPod.fs*60), axis=1)
+    LM = np.insert(LM,6,values = LM[:,0]/(paramsiPod.fs*60), axis=1)
     LM_i = np.array(LM, dtype='i')
     
-
-
     # Record epoch number of LM in 8th Column
-    LM = np.insert(LM,7,values = np.round(LM_i[:,6]*2 + 0.5),axis=1)
+    LM = np.insert(LM,7,values = np.round(LM[:,6]*2 + 0.5),axis=1)
     LM_i = np.array(LM, dtype='i')
-    
+    #print("LM 8th col:",LM)
 
     # Record breakpoints after long LM in 9th column
     col_9=[]
@@ -236,8 +373,7 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     for i in range(LM.shape[0]):
         col_10.append(np.sum(RMS[LM_i[i,0]:LM_i[i,1]])/paramsiPod.fs)
     LM = np.insert(LM,9,values=col_10,axis=1)
-    #print("final LM:")
-    #print(LM)
+
     print("end of: getLMiPod")
     return LM
 #########################################################
@@ -342,10 +478,6 @@ def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,f
     
     return fullRuns
 
-def find(a, func):
-    return [i for (i, val) in enumerate(a) if func(val)]
-
-
 def returnRuns(vals,duration): 
     vals = np.asarray(vals)
     k = (np.diff(vals) != 1).astype(int)
@@ -359,13 +491,12 @@ def returnRuns(vals,duration):
     runs = [startIndices,stopIndices]
     return runs
 
-"""
- This Function finds the closest next (sequential) run from the current
- position.  It does include prior runs.  If there is no run it returns a
- distance of -1, otherwise it returns the distance to the next run.  It
- will also return the length of that run.  If there is no run it returns a
- length of -1.
- """
+ #This Function finds the closest next (sequential) run from the current
+ #position.  It does include prior runs.  If there is no run it returns a
+ #distance of -1, otherwise it returns the distance to the next run.  It
+ #will also return the length of that run.  If there is no run it returns a
+ #length of -1.
+ 
 def calcDistToRun(run,position):
     distList = run[:][0] - position
     distPos = distList[distList>0]
@@ -377,7 +508,7 @@ def calcDistToRun(run,position):
         length = -1
         dist = -1
     return dist,length
-
+"""
 ########################################################################################
 ########################################################################################
 
@@ -386,7 +517,9 @@ def calcDistToRun(run,position):
 
 ########################################################################################
 ########################################################################################
-""" candidate_lms():
+""" candidate_lms():"""
+##########################################################################################
+"""
 % Determine candidate leg movements for PLM from monolateral LM arrays. If
 % either rLM or lLM is empty ([]), this will return monolateral candidates,
 % otherwise if both are provided they will be combined according to current
@@ -400,6 +533,8 @@ def calcDistToRun(run,position):
 %   - rLM - array from right leg (needs start and stop times)
 %   - lLM - array from left leg
 %
+"""
+
 """
 def candidate_lms(rLM,lLM,params):
     CLM=[]
@@ -574,6 +709,8 @@ def removeShortIMI(CLM,params):
 
     CLMt = getIMI(CLMt,params.fs)
     return CLMt
+
+"""
 ##########################################################################################
 ##########################################################################################
 
@@ -581,146 +718,7 @@ def removeShortIMI(CLM,params):
 ##########################################################################################
 ##########################################################################################
 """ calculating Arousal """
-
-def calculateArousal(bCLM,leftBandData,rightBandData):
-    percentVal = 0.45
-    Arousal = bCLM[:,[0,1]]
-    
-    if len(leftBandData) != 0:    
-        leftrmsAcc = rms(removeAccGrav(leftBandData[:,7:10]))
-        leftrmsGyr = rms(leftBandData[:,10:13])
-    if len(rightBandData) != 0:
-        rightrmsAcc = rms(removeAccGrav(rightBandData[:,7:10]))
-        rightrmsGyr = rms(rightBandData[:,10:13])
-    
-    DurationArr = bCLM[:,2]
-    CLM_OR_PLM = bCLM[:,4]
-   
-    AUCArr = []
-    MAXActivityArr = []
-    GYRORMS_AUCArr = []
-    GYRORMS_MAXActivityArr = []
-    GYROX_AUCArr = []
-    GYROX_MAXActivityArr = []
-    GYROY_AUCArr = []
-    GYROY_MAXActivityArr = []
-    GYROZ_AUCArr = []
-    GYROZ_MAXActivityArr = []
-    ACC_STD_Arr = []
-    GYRO_STD_Arr = []
-    CAP1_STD_Arr = []
-    CAP2_STD_Arr = []
-    CAP3_STD_Arr = []
-    
-    arousal_col_2 = []
-    for i in range(bCLM.shape[0]):
-        if bCLM[i,12] == 2:
-            AUCArr.append(np.sum(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            MAXActivityArr.append(np.max(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRORMS_AUCArr.append(np.sum(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRORMS_MAXActivityArr.append(np.max(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]))  
-            GYROX_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
-            GYROX_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
-            GYROY_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
-            GYROY_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]))  
-            GYROZ_AUCArr.append(np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
-            GYROZ_MAXActivityArr.append(np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
-            ACC_STD_Arr.append(np.std(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRO_STD_Arr.append(np.std(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            CAP1_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])) 
-            CAP2_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])) 
-            CAP3_STD_Arr.append(np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),6])) 
-        elif bCLM[i,12] == 1:
-            AUCArr.append(np.sum(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]))
-            MAXActivityArr.append(np.max(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRORMS_AUCArr.append(np.sum(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRORMS_MAXActivityArr.append(np.max(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYROX_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
-            GYROX_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])) 
-            GYROY_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
-            GYROY_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])) 
-            GYROZ_AUCArr.append(np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
-            GYROZ_MAXActivityArr.append(np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])) 
-            ACC_STD_Arr.append(np.std(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            GYRO_STD_Arr.append(np.std(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])) 
-            CAP1_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])) 
-            CAP2_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])) 
-            CAP3_STD_Arr.append(np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),6]))
-        else:
-            AUCArr.append(np.mean([np.sum(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.sum(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            MAXActivityArr.append(np.mean([np.max(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.max(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            GYRORMS_AUCArr.append(np.mean([np.sum(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.sum(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            GYRORMS_MAXActivityArr.append(np.mean([np.max(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.max(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            GYROX_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])])) 
-            GYROX_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),10]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),10])])) 
-            GYROY_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])])) 
-            GYROY_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),11]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),11])])) 
-            GYROZ_AUCArr.append(np.mean([np.sum(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12]),np.sum(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])])) 
-            GYROZ_MAXActivityArr.append(np.mean([np.max(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),12]),np.max(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),12])])) 
-            ACC_STD_Arr.append(np.mean([np.std(leftrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])]),np.std(rightrmsAcc[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            GYRO_STD_Arr.append(np.mean([np.std(leftrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])]),np.std(rightrmsGyr[int(bCLM[i,0]):int(bCLM[i,1])])])) 
-            CAP1_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),4]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),4])])) 
-            CAP2_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),5]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),5])])) 
-            CAP3_STD_Arr.append(np.mean([np.std(leftBandData[int(bCLM[i,0]):int(bCLM[i,1]),6]),np.std(rightBandData[int(bCLM[i,0]):int(bCLM[i,1]),6])])) 
-        """
-        print("calculated values:")
-        print(AUCArr[i])
-        print(MAXActivityArr[i])
-        print(GYRORMS_AUCArr[i])
-        print(GYRORMS_MAXActivityArr[i])
-        print(GYROX_AUCArr[i])
-        print(GYROX_MAXActivityArr[i])
-        print(GYROY_AUCArr[i])
-        print(GYROY_MAXActivityArr[i])
-        print(GYROZ_AUCArr[i])
-        print(GYROZ_MAXActivityArr[i])
-        print(ACC_STD_Arr[i])
-        print(GYRO_STD_Arr[i])
-        print(CAP1_STD_Arr[i])
-        print(CAP2_STD_Arr[i])
-        print(CAP3_STD_Arr[i])
-        """
-        val = LRplot(DurationArr[i],AUCArr[i],MAXActivityArr[i],GYRORMS_AUCArr[i],GYRORMS_MAXActivityArr[i],GYROX_AUCArr[i],GYROX_MAXActivityArr[i],GYROY_AUCArr[i],GYROY_MAXActivityArr[i],GYROZ_AUCArr[i],GYROZ_MAXActivityArr[i],ACC_STD_Arr[i],GYRO_STD_Arr[i],CAP1_STD_Arr[i],CAP2_STD_Arr[i],CAP3_STD_Arr[i],CLM_OR_PLM[i])
-        arousal_col_2 = np.append(arousal_col_2, np.array(val > percentVal))
-    Arousal = np.insert(Arousal,2, arousal_col_2, 1)    
-    return Arousal
-
-def removeAccGrav(accel):
-    k = 0.2
-    g = np.zeros(accel.shape)    
-    g[1:g.shape[0],:] = k * accel[1:accel.shape[0],:] + (1-k) * accel[0:accel.shape[0]-1,:]
-    accel = accel - g
-    accel[0,:] = np.zeros(accel.shape[1])
-    return accel
-
-def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,val14,val15,val16,val17):
-    
-    coefficients = [-7.26071921174945,-1.63495844368173,4.12112328164108e-06,0.000307550213228846,-2.25291668515951e-06,-0.000296449861658441,-4.25363370848999e-06,-7.11370115182980e-05,-6.21629692944963e-06,0.000111605764350175,7.33668581844596e-07,0.000388852009829072,-0.00199518504774808,0.00370318074433064,9.46982846482890e-06,0.000100640871621468,-1.07690156038127e-05,-0.423981247009446]
-    
-    Intercept=  coefficients[0]
-    duration=  coefficients[1]
-    AUC=  coefficients[2]
-    MAX_Activity= coefficients[3]
-    GYRORMS_AUC=  coefficients[4]
-    GYRORMS_MAX_Activity= coefficients[5]
-    GYROX_AUC=  coefficients[6]
-    GYROX_MAX_Activity= coefficients[7]
-    GYROY_AUC=  coefficients[8]
-    GYROY_MAX_Activity= coefficients[9]
-    GYROZ_AUC=  coefficients[10]
-    GYROZ_MAX_Activity= coefficients[11]
-    ACC_STD=  coefficients[12]
-    GYRO_STD= coefficients[13]
-    CAP1_STD=  coefficients[14]
-    CAP2_STD=  coefficients[15]
-    CAP3_STD=  coefficients[16]
-    CLM_OR_PLM = coefficients[17]
-    
-    val = Intercept+ (duration*val1) + (AUC*val2) + (val3*MAX_Activity) + (GYRORMS_AUC*val4) + (val5*GYRORMS_MAX_Activity) + (GYROX_AUC*val6) + (val7*GYROX_MAX_Activity) + (GYROY_AUC*val8) + (val9*GYROY_MAX_Activity) + (GYROZ_AUC*val10) + (val11*GYROZ_MAX_Activity) + (ACC_STD*val12) + (val13*GYRO_STD)+ (CAP1_STD*val14) + (val15*CAP2_STD)+ (CAP3_STD*val16)+(CLM_OR_PLM*val17)
-    output_val = (np.exp(val)/(1+np.exp(val)))
-
-    return output_val
-
+##########################################################################################
 
 ##########################################################################################
 ##########################################################################################
@@ -728,8 +726,9 @@ def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,
 
 ##########################################################################################
 ##########################################################################################
-""" periodic_lms()::
-
+""" periodic_lms()::"""
+##########################################################################################
+"""
 %% PLM = periodic_lms(CLM,params)
 %  find periodic leg movements from the array of CLM. Can either ignore
 %  intervening LMs or add breakpoints. Contains subfunctions for ignoring
@@ -740,117 +739,6 @@ def LRplot(val1,val2,val3,val4,val5,val6,val7,val8,val9,val10,val11,val12,val13,
 % if intervening lm option is not selected, we remove CLMs whose IMI are
 % too short. Really, new standards say that these should always be
 % breakpoint, so the first case is only for posterity. """
-def periodic_lms(CLM,params):
-    if params.iLMbp != 'on':
-        CLMt = removeShortIMI_periodic(CLM,params.minIMIDuration,params.fs)
-    else:
-        CLMt = CLM
- 
-    CLMt[:,4] = np.zeros(CLMt.shape[0]) # Restart PLM
-    BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
-    CLMt = markPLM3(CLMt,BPloct)
-
-    #print("CLMt after markPLM3()")
-    #print(CLMt)
-
-    PLM = []
-    for i in range(CLMt.shape[0]):
-        if CLMt[i,4] == 1:
-            PLM = np.append(PLM,CLMt[i,:],0)
-    #print("PLM after markPLM3()")
-    #print(PLM)
-
-    return PLM, CLMt
-##########################################################################################
-
-"""
-%% CLMt = removeShortIMI(CLM,minIMIDuration,fs)
-% This function removes CLM with IMI that are too short to be considered
-% PLM. This is according to older standards, and hopefully this code will
-% not be necessary in the future.
-"""
-def removeShortIMI_periodic(CLM,minIMIDuration,fs):
-    i = 2 #skip the first movement
-    CLMt = CLM
-    while i < CLMt.shape[0]:
-        if CLMt[i,3] >= minIMIDuration:
-            i = i + 1
-        else:
-            CLMt = np.delete(CLMt,i,0)
-            CLMt[i,3] = (CLMt[i,0] - CLMt[i-1,0])/fs
-    return CLMt
-
-
-##########################################################################################
-"""
-%% BPloc = BPlocAndRunsArray(CLM,minNumIMI)
-%  col 1: Break point location
-%  col 2: Number of leg movements
-%  col 3: PLM =1, no PLM = 0
-%  col 4: #LM if PLM
-% This is really only for internal use, nobody wants to look at this BPloc
-% array, but it is necessary to get our PLM. """
-def BPlocAndRunsArray(CLM,minNumIMI):
-    #print("BPlocAndRunsArray()")
-    #print("CLM")
-    #print(CLM)
-    
-    col_1 = find(CLM[:,8],lambda x: x != 0) # BP locations
-    #print(col_1)
-    #print("BPloc")
-    BPloc = np.empty([len(col_1),0])
-    #print(BPloc)
-    BPloc = np.insert(BPloc,0,col_1,1)
-    
-
-    # Add number of movements until next breakpoint to column 2
-    col_2 = []
-    for i in range(BPloc.shape[0]-1):
-        col_2.append(BPloc[i+1,0] - BPloc[i,0])
-    col_2.append(CLM.shape[0] - BPloc[BPloc.shape[0]-1,0])
-    #print("col_2")
-    #print(col_2)
-
-    BPloc = np.insert(BPloc,1,col_2,1)
-
-    # Mark whether a run of LM meets the minimum requirement for number of IMI
-    col_3 = []
-    for i in range(BPloc.shape[0]):
-        col_3.append(BPloc[i,1] > minNumIMI)
-    BPloc = np.insert(BPloc,2,col_3,1)
-    #print(col_3)
-
-    # Mark the number of movements in each PLM series
-    col_4 = []
-    for i in range(BPloc.shape[0]):
-        if BPloc[i,2] == 1:
-            col_4.append(BPloc[i,1])
-        else:
-            col_4.append(0)    
-        
-    BPloc = np.insert(BPloc,3,col_4,1)
-
-    return BPloc
-
-##########################################################################################
-"""
-%% CLM = markPLM3(CLM,BPloc,fs)
-% places a 1 in column 5 for all movements that are part of a run
-% of PLM. Again, used internally, you'll never really need to run this
-% independent of periodic_lms.
-"""
-def markPLM3(CLM,BPloc):
-    bpPLM = []
-    for i in range(BPloc.shape[0]):
-        if BPloc[i,2] == 1:
-            bpPLM.append(BPloc[i,:])
-    
-
-    if len(bpPLM) > 0:
-        for i in range(len(bpPLM)):
-            CLM[bpPLM[i,0]:bpPLM[i,0]+bpPLM[i,1]-1,4] = 1
-
-    return CLM
 
 ##########################################################################################
 ##########################################################################################
@@ -858,82 +746,6 @@ def markPLM3(CLM,BPloc):
 
 ##########################################################################################
 ##########################################################################################
-
-def scoreSleep(fs,RMS,LM,GLM):
-    #Calculate numLMper10epochs - the number of GLM+LM per 10 epochs
-    dataPtsPerWindow=30*10*fs
-    numWindows = np.ceil(RMS.shape[0]/dataPtsPerWindow)
-    
-    LM = np.array(LM)
-    GLM = np.array(GLM)
-    #print("LM")
-    #print(LM[0:LM.shape[0],0])
-    #print("GLM")
-    #print(GLM[0:GLM.shape[0],0])
-
-    #print("concatenate")
-    if LM.size != 0:
-        b = np.concatenate(LM[0:LM.shape[0],0],GLM[0:GLM.shape[0],0],axis=0)
-    else:
-        b = GLM[0:GLM.shape[0],0]
-
-    xy = np.arange(0,numWindows*dataPtsPerWindow+1,dataPtsPerWindow)
-    numLMper10epochs = np.histogram(b,xy)[0]
-    
-    # wakeLM is a logical vector indicating whether there is at least 1 GLM,LM in
-    # the 10 epochwindow that the current dataPt is in (0=there is LM, 1= no LM) 1 corresponds to wake.
-    wakeLM = np.zeros(RMS.shape[0])
-    
-    for i in range(0,int(numWindows)-1):
-        start = (i)*dataPtsPerWindow+1
-        end = (i+1)*dataPtsPerWindow
-        wakeLM[start-1:end] = numLMper10epochs[i] * np.ones(dataPtsPerWindow)
-    start = end+1
-    end = RMS.shape[0]
-    
-    wakeLM[start-1:end] = numLMper10epochs[int(numWindows)-1] * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
-    
-
-    wakeLM = wakeLM == 0
-
-    # Acceleration stuff
-    AccelRMS10epochmax = np.zeros(RMS.shape[0])
-    for i in range(0,int(numWindows)-1):
-        start = (i)*dataPtsPerWindow+1
-        end = (i+1)*dataPtsPerWindow
-        AccelRMS10epochmax[start-1:end] = np.max(RMS[start-1:end]) * np.ones(dataPtsPerWindow)
-    start = end + 1
-    end = RMS.shape[0]
-    AccelRMS10epochmax[start-1:end] = np.max(RMS[(int(numWindows)-1)*dataPtsPerWindow+1:int(numWindows)*dataPtsPerWindow]) * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
-    
-    AccelRMS10epochmax = AccelRMS10epochmax > 0.15
-    # if the max in that 10 epoch window is <.15 then there is no activity and
-    # we record sleep, vice versa for wake
-
-    # if the max in the 2 epoch window is >.5 then we record wake, even if prior
-    # LM criteria recorded sleep.
-    dataPtsPerWindow = 30 * 2 * fs
-    numWindows = np.ceil(RMS.shape[0]/dataPtsPerWindow)
-    AccelRMS2epochmax = np.zeros(RMS.shape[0])
-    for i in range(0,int(numWindows)-1):        
-        start = (i)*dataPtsPerWindow+1
-        end = (i+1)*dataPtsPerWindow
-        AccelRMS2epochmax[start-1:end] = np.max(RMS[start-1:end]) * np.ones(dataPtsPerWindow)
-    start = end + 1
-    end = RMS.shape[0]
-    AccelRMS2epochmax[start-1:end] = np.max(RMS[(int(numWindows)-1)*dataPtsPerWindow+1:int(numWindows)*dataPtsPerWindow]) * np.ones(np.mod(RMS.shape[0],dataPtsPerWindow))
-    AccelRMS2epochmax = AccelRMS2epochmax > 0.5
-
-    # Only if <80% of epochs have LM, include accelerometer criteria
-    percentLM = 1 - (sum(wakeLM)/wakeLM.shape[0])
-
-    if percentLM < 0.8:
-        wake = (wakeLM&AccelRMS10epochmax)| AccelRMS2epochmax
-    else:
-        wake = wakeLM
-
-    return wake
-
 
 ##########################################################################################
 ##########################################################################################
@@ -954,64 +766,7 @@ def scoreSleep(fs,RMS,LM,GLM):
 %WASO.dur=total duration of wake after sleep began
 %WASO.avgdur=average duration of each waking period
 """
-def calculateWASO_RE(wake,minSleepTime,fs):
-    wake = wake + 1 # convert it to 'up2down1' format ie if awake, wake ==2 else  wake==1
-    minSleepTime = minSleepTime * 60 * fs # convert from minutes to datapoints
 
-    # If they were never awake record number and duration at 0.
-    if sum(wake == 2) == 0:
-        WASO.sleepStart = 1
-        WASO.num = 0
-        WASO.dur = 0
-        WASO.avgdur = 0
-    elif sum(wake == 1) == 0: # If they were always awake record number and duration at NaN.
-        WASO.sleepStart = None
-        WASO.num = None
-        WASO.dur = None
-        WASO.avgdur = None
-    else:
-        sleepBreakPoints = np.insert(abs(np.diff(wake)), 0, 1)   # 1 when fall asleep/wake up
-        
-        runStart = find(sleepBreakPoints, lambda x: x==1) 
-        #print("runStart 1",runStart)
-        runLength = []
-        for i in range(len(runStart)-1):
-            runLength.append(runStart[i+1] - runStart[i])   # Assumes next break point is immediately after the last row
-        
-        last = len(wake)-(runStart[-1]+2)
-        runLength.append(last)
-
-        #print("runlength 1",runLength)
-        nums = []
-        for i in range(len(runLength)):
-            nums.append(runLength[i] >= minSleepTime and wake[runStart[i]] == 1) 
-        
-        sleepStart = runStart[find(nums,lambda x: x == 1)[0]]
-        WASO.sleepStart = sleepStart
-
-        # RunStart is now all runs from start of sleep
-        runStart = []
-        runStart_lst = find(sleepBreakPoints[sleepStart:len(sleepBreakPoints)],lambda x: x == 1)
-        for j in range(len(runStart_lst)):
-            runStart.append(runStart_lst[j]  + sleepStart )
-        #print("runStart 2",runStart)
-        runLength = []
-        for i in range(len(runStart)-1):
-            runLength.append(runStart[i+1] - runStart[i])   # Assumes next break point is immediately after the last row
-        
-        last = len(wake)-(runStart[-1])
-        runLength.append(last)
-        #print("runLength 2",runLength)
-
-        WASO.sleepStart = sleepStart
-        WASO.num = sum(wake[runStart]==2)
-        print("WASO num ",WASO.num)
-        
-        ##
-        WASO.dur=sum(runLength[wake[runStart]==2])/fs/60
-        WASO.avgdur=mean(runLength[wake[runStart]==2])/fs/60
-        ##
-    return WASO
 ##########################################################################################
 ##########################################################################################
 
