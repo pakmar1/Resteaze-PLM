@@ -5,8 +5,22 @@ from numpy import mean, sqrt, square
 from utilities import  rms, find
 
 
+"""
+ The LM matrix is made based on paramsiPod strucutre, RMS values, and
+ up2Down1 vlaues.
+ 
+ Input
+ paramsiPod -input structure that define criteria for scoring (The WASM criteria
+             for scoring different leg movements)
+ RMS - root mean value square of accelometer data.
+ up2Down1 - showing if the patient whether the patient is in sleep or awake.
+
+ Output
+ LM - matrix of leg movement having minimum duration of 0.5 seconds and no 
+      max duration. The structure include differnet type of variables.
+"""
 def getLMiPod(paramsiPod,RMS,up2Down1):
-    print("start of: getLMiPod")
+    #print("start of: getLMiPod")
     if RMS[0] == None:
         LM = None
         return
@@ -15,7 +29,6 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
     if LM.size == 0:
         return
     
-
     #%% Median must pass lowthreshold
     if paramsiPod.morphologyCriteria == 'on':
         LM = cutLowMedian(RMS,LM,paramsiPod.lowThreshold,paramsiPod.fs)
@@ -63,7 +76,7 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
         col_10.append(np.sum(RMS[LM_i[i,0]:LM_i[i,1]])/paramsiPod.fs)
     LM = np.insert(LM,9,values=col_10,axis=1)
 
-    print("end of: getLMiPod")
+    #print("end of: getLMiPod")
     return LM
 #########################################################
 

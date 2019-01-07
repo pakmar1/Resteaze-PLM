@@ -5,13 +5,25 @@ from numpy import mean, sqrt, square
 from utilities import  rms, find
 
 
+"""
+%% PLM = periodic_lms(CLM,params)
+%  find periodic leg movements from the array of CLM. Can either ignore
+%  intervening LMs or add breakpoints. Contains subfunctions for ignoring
+%  iLMs, restructuring breakpoint locations to find PLM runs and marking
+%  the CLM which occur in periodic series.
 
+% Create CLMt array of all CLM with IMI greater than the minimum allowable
+% if intervening lm option is not selected, we remove CLMs whose IMI are
+% too short. Really, new standards say that these should always be
+% breakpoint, so the first case is only for posterity. 
+"""
 def periodic_lms(CLM,params):
     if params.iLMbp != 'on':
         CLMt = removeShortIMI_periodic(CLM,params.minIMIDuration,params.fs)
     else:
         CLMt = CLM
- 
+    #print("CLM ", CLM.shape)
+    #print("params ", params)
     CLMt[:,4] = np.zeros(CLMt.shape[0]) # Restart PLM
     BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
     CLMt = markPLM3(CLMt,BPloct)
@@ -20,10 +32,11 @@ def periodic_lms(CLM,params):
     #print(CLMt)
 
     PLM = []
-    for i in range(CLMt.shape[0]):
+    for i in range(CLMt.shape[0]-1):
         if CLMt[i,4] == 1:
-            PLM = np.append(PLM,CLMt[i,:],0)
-    #print("PLM after markPLM3()")
+            PLM.append(CLMt[i,:])
+    #print("PLM after in periodic_lms()")
+    PLM = np.asarray(PLM)
     #print(PLM)
 
     return PLM, CLMt
@@ -107,14 +120,17 @@ def BPlocAndRunsArray(CLM,minNumIMI):
 """
 def markPLM3(CLM,BPloc):
     bpPLM = []
+    #print("BPloc len",BPloc)
     for i in range(BPloc.shape[0]):
         if BPloc[i,2] == 1:
             bpPLM.append(BPloc[i,:])
-    
+    #print("bPLM len: ",len(bpPLM))
+    #print("bPLM ",bpPLM)
+    bpPLM = np.asarray(bpPLM)
 
     if len(bpPLM) > 0:
         for i in range(len(bpPLM)):
-            CLM[bpPLM[i,0]:bpPLM[i,0]+bpPLM[i,1]-1,4] = 1
+            CLM[ int(bpPLM[i,0]) : int(bpPLM[i,0]+bpPLM[i,1]-1),4] = 1
 
     return CLM
 

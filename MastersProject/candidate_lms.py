@@ -4,8 +4,26 @@ import numpy as np
 from numpy import mean, sqrt, square
 from utilities import  rms, find
 
+"""
+ Determine candidate leg movements for PLM from monolateral LM arrays. If
+ either rLM or lLM is empty ([]), this will return monolateral candidates,
+ otherwise if both are provided they will be combined according to current
+ WASM standards. Adds other information to the CLM table, notably
+ breakpoints to indicate potential ends of PLM runs, sleep stage, etc. Of
+ special note, the 13th column of the output array indicates which leg the
+ movement is from: 1 is right, 2 is left and 3 is bilateral.
+
+
+ inputs:
+   - rLM - array from right leg (needs start and stop times)
+   - lLM - array from left leg
+
+"""
+
 def candidate_lms(rLM,lLM,params):
     CLM=[]
+    #print("lLM ",lLM.shape)
+    #print("rLM ",rLM.shape)
     if rLM.size != 0 and lLM.size != 0:
         #print("both full")
         # Reduce left and right LM arrays to exclude too long movements, but add
@@ -55,7 +73,7 @@ def candidate_lms(rLM,lLM,params):
     # excluded because IMI is disrupted by a too-long LM
     contains_too_long = find(CLM[:,8],lambda x: x == 4)
     for i in range(len(contains_too_long)):
-        CLM[contains_too_long[i]+1,8] = 4
+        CLM[contains_too_long[i],8] = 4
     CLM = np.delete(CLM,contains_too_long,0)
 
     # add breakpoints if the duration of the combined movement is greater
@@ -110,8 +128,7 @@ def candidate_lms(rLM,lLM,params):
         CLM[:,11] = np.zeros(CLM.shape[0])
         # 3 add breakpoints if IMI > 90 seconds (standard)    
         CLM[CLM[:,3] > params.maxIMIDuration,8] = 1
-        #print("CLM out of candidate_lms():")
-        #print(CLM)
+        print("CLM out of candidate_lms(): ",CLM.shape)
     return CLM
 
 def rOV2(lLM,rLM,fs):
@@ -124,7 +141,7 @@ def rOV2(lLM,rLM,fs):
 
     #combine and sort LM arrays
     rLM = np.insert(rLM,12,values = np.ones(rLM.shape[0]),axis=1)
-    lLM = np.insert(lLM,12,values = np.full((rLM.shape[0]),2),axis=1)
+    lLM = np.insert(lLM,12,values = np.full((lLM.shape[0]),2),axis=1)
 
     combLM = np.concatenate((rLM,lLM),axis = 0)
     combLM = combLM[combLM[:,0].argsort()]
@@ -170,7 +187,7 @@ def removeShortIMI(CLM,params):
     CLMt =[]
     for rl in range(CLM.shape[0]):
         if CLM[rl,3] >= params.minIMIDuration:
-            CLMt[rc,:] = CLM[rl,:]
+            CLMt[rc][:] = CLM[rl][:]
             rc = rc + 1
         elif rl < CLM.shape[0]-1:
             CLM[rl+1,3] = CLM[rl+1,3]+CLM[rl,3]

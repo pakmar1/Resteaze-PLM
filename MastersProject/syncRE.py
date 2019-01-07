@@ -1,5 +1,12 @@
+import sys
+import os
+import numpy as np
 
-
+"""
+ This function synchronizes each leg
+ Only points with very close time stamps are kept. This assumes sampling
+ rate is constant
+"""
 def syncRE(leftLeg,rightLeg):
     #print("in syncRE")
     leftLegsize = leftLeg.shape[0]
@@ -35,10 +42,10 @@ def syncRE(leftLeg,rightLeg):
 
     #Delete rows that come before the sync time
     if leftLegsize > rightLegsize:
-        leftLeg = leftLeg[0:rightLegsize][:]
-        leftminusright = leftLeg[rightLegsize][3] - rightLeg[rightLegsize][3]
+        leftLeg = leftLeg[0:rightLegsize,:]
+        leftminusright = leftLeg[rightLegsize-1,3] - rightLeg[rightLegsize-1,3]
     elif leftLegsize < rightLegsize:
-        rightLeg = rightLeg[0:leftLegsize][:]
-        leftminusright = rightLeg[leftLegsize][3] - rightLeg[leftLegsize][3]
-
+        rightLeg = rightLeg[0:leftLegsize,:]
+        leftminusright = leftLeg[leftLegsize-1,3] - rightLeg[leftLegsize-1,3]
+    #print("legs data synchronized...")
     return leftLeg,rightLeg

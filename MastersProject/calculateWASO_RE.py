@@ -5,7 +5,20 @@ from numpy import mean, sqrt, square
 from utilities import  rms, find, WASO
 
 
+""" 
+ WASO calculates the number of awakenings and total wake-after-sleep-onset duration.
+ 
+ inputs (default values):
+ up2Down1 = whether they are in sleep or not
+ minSleepTime = 5 minutes
+ fs = 20Hz
 
+ outputs:
+ WASO.sleepStart=datapoint where sleep begins
+ WASO.num=number of times wake after sleep began
+ WASO.dur=total duration of wake after sleep began
+ WASO.avgdur=average duration of each waking period
+"""
 
 def calculateWASO_RE(wake,minSleepTime,fs):
     wake = wake + 1 # convert it to 'up2down1' format ie if awake, wake ==2 else  wake==1
@@ -24,14 +37,14 @@ def calculateWASO_RE(wake,minSleepTime,fs):
         WASO.avgdur = None
     else:
         sleepBreakPoints = np.insert(abs(np.diff(wake)), 0, 1)   # 1 when fall asleep/wake up
-        
-        runStart = find(sleepBreakPoints, lambda x: x==1) 
-        #print("runStart 1",runStart)
+        #print("sleepBreakPoints" , sleepBreakPoints)
+        runStart = find(sleepBreakPoints, lambda x: x==1)
+        #print("runStart ",runStart)
         runLength = []
         for i in range(len(runStart)-1):
             runLength.append(runStart[i+1] - runStart[i])   # Assumes next break point is immediately after the last row
         
-        last = len(wake)-(runStart[-1]+2)
+        last = len(wake) - (runStart[-1]+2)
         runLength.append(last)
 
         #print("runlength 1",runLength)
@@ -58,13 +71,15 @@ def calculateWASO_RE(wake,minSleepTime,fs):
 
         WASO.sleepStart = sleepStart
         WASO.num = sum(wake[runStart]==2)
-
+        #print("runStart ",runStart)
         dur_ind = find(wake[runStart],lambda x: x == 2)
         dur =[]
         for i in range(len(dur_ind)):
-            dur.append( runLength[dur_ind[i]])
-        WASO.dur = sum(dur) /(fs*60)
-        WASO.avgdur = mean(dur)/(fs*60)
+            dur.append(runLength[dur_ind[i]])
+
+        #print("dur ",dur)
+        WASO.dur = sum(dur) /fs/60
+        WASO.avgdur = mean(dur)/fs/60
 
         #print("WASO sleepStart",WASO.sleepStart)
         #print("WASO num ",WASO.num)

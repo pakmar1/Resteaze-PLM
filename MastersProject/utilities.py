@@ -18,6 +18,7 @@ class nightData:
 class WASO:
     pass
 
+
 """ function to convert number to time"""
 def sleepText(sleepTime):
     sleepHr = int(np.mod(np.floor(sleepTime/60)+12,24))
