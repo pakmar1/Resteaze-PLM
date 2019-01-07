@@ -12,26 +12,29 @@ def syncRE(leftLeg,rightLeg):
     leftLegsize = leftLeg.shape[0]
     rightLegsize = rightLeg.shape[0]
     
+    #print("leftsize ",leftLegsize,"leftLeg " , leftLeg[:,3])
+    #print("rightsize ",rightLegsize,"rightLeg ",rightLeg[:,3])
+
     # start of sync
-    if leftLeg[0][3] > rightLeg[0][3]:
-        rightstart=0
-        for i in range(leftLegsize,-1,-1):
-            if leftLeg[0][3] <= rightLeg[0][3]:
+    if leftLeg[0,3] > rightLeg[0,3]:
+        rightstart = 0
+        for i in range(leftLegsize-1,-1,-1):
+            if leftLeg[0,3] <= rightLeg[i,3]:
                 rightstart = i
         
         if rightstart > 0:
-            rightLeg = rightLeg[rightstart:][:]
+            rightLeg = rightLeg[rightstart:,:]
         else:
             rightstart = None
 
-    elif leftLeg[0][3] < rightLeg[0][3]:
+    elif leftLeg[0,3] < rightLeg[0,3]:
         leftstart = 0
-        for i in range(rightLegsize,-1,-1):
-            if leftLeg[i][3] >= rightLeg[0][3]:
+        for i in range(rightLegsize-1,-1,-1):
+            if leftLeg[i,3] >= rightLeg[0,3]:
                 leftstart = i
         
         if leftstart > 0:
-            leftLeg = leftLeg[leftstart:][:]
+            leftLeg = leftLeg[leftstart:,:]
         else:
             leftstart = None
     # end of sync
@@ -48,4 +51,5 @@ def syncRE(leftLeg,rightLeg):
         rightLeg = rightLeg[0:leftLegsize,:]
         leftminusright = leftLeg[leftLegsize-1,3] - rightLeg[leftLegsize-1,3]
     #print("legs data synchronized...")
+    #print("leftlegSize ",leftLeg,"rightLegSize ",rightLeg)
     return leftLeg,rightLeg

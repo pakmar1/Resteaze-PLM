@@ -17,6 +17,7 @@ from utilities import  rms, find
 % too short. Really, new standards say that these should always be
 % breakpoint, so the first case is only for posterity. 
 """
+
 def periodic_lms(CLM,params):
     if params.iLMbp != 'on':
         CLMt = removeShortIMI_periodic(CLM,params.minIMIDuration,params.fs)
@@ -24,6 +25,7 @@ def periodic_lms(CLM,params):
         CLMt = CLM
     #print("CLM ", CLM.shape)
     #print("params ", params)
+
     CLMt[:,4] = np.zeros(CLMt.shape[0]) # Restart PLM
     BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
     CLMt = markPLM3(CLMt,BPloct)
@@ -61,14 +63,17 @@ def removeShortIMI_periodic(CLM,minIMIDuration,fs):
 
 
 ##########################################################################################
+
 """
-%% BPloc = BPlocAndRunsArray(CLM,minNumIMI)
-%  col 1: Break point location
-%  col 2: Number of leg movements
-%  col 3: PLM =1, no PLM = 0
-%  col 4: #LM if PLM
-% This is really only for internal use, nobody wants to look at this BPloc
-% array, but it is necessary to get our PLM. """
+ BPloc = BPlocAndRunsArray(CLM,minNumIMI)
+  col 1: Break point location
+  col 2: Number of leg movements
+  col 3: PLM =1, no PLM = 0
+  col 4: #LM if PLM
+ This is really only for internal use, nobody wants to look at this BPloc
+ array, but it is necessary to get our PLM. 
+"""
+
 def BPlocAndRunsArray(CLM,minNumIMI):
     #print("BPlocAndRunsArray()")
     #print("CLM")
@@ -133,4 +138,3 @@ def markPLM3(CLM,BPloc):
             CLM[ int(bpPLM[i,0]) : int(bpPLM[i,0]+bpPLM[i,1]-1),4] = 1
 
     return CLM
-

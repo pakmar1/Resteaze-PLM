@@ -24,6 +24,8 @@ def candidate_lms(rLM,lLM,params):
     CLM=[]
     #print("lLM ",lLM.shape)
     #print("rLM ",rLM.shape)
+    print("CLM sha before",lLM.shape, rLM.shape)
+
     if rLM.size != 0 and lLM.size != 0:
         #print("both full")
         # Reduce left and right LM arrays to exclude too long movements, but add
@@ -34,13 +36,13 @@ def candidate_lms(rLM,lLM,params):
         rLM = rLM[rLM[:,2]>=0.5,:]
         lLM = lLM[lLM[:,2]>=0.5,:]
 
-        rLM[rLM[:rLM.shape[0],2]>params.maxCLMDuration,8] = 4
-        lLM[lLM[:lLM.shape[0],2]>params.maxCLMDuration,8] = 4
+        rLM[rLM[:,2]>params.maxCLMDuration,8] = 4
+        lLM[lLM[:,2]>params.maxCLMDuration,8] = 4
 
         # Combine left and right and sort.
         CLM = rOV2(lLM,rLM,params.fs)
         #print("CLM after rOV2")
-        #print(CLM)
+        #print(CLM.shape)
     elif lLM.size != 0:
         print("left is full")
         lLM[:,2] = (lLM[:,1] - lLM[:,0])/params.fs
@@ -72,8 +74,8 @@ def candidate_lms(rLM,lLM,params):
     # inspecting IMI of CLM later, movements with the bp code 4 will be
     # excluded because IMI is disrupted by a too-long LM
     contains_too_long = find(CLM[:,8],lambda x: x == 4)
-    for i in range(len(contains_too_long)):
-        CLM[contains_too_long[i],8] = 4
+    for i in range(len(contains_too_long)-1):
+        CLM[contains_too_long[i]+1,8] = 4
     CLM = np.delete(CLM,contains_too_long,0)
 
     # add breakpoints if the duration of the combined movement is greater
@@ -128,16 +130,17 @@ def candidate_lms(rLM,lLM,params):
         CLM[:,11] = np.zeros(CLM.shape[0])
         # 3 add breakpoints if IMI > 90 seconds (standard)    
         CLM[CLM[:,3] > params.maxIMIDuration,8] = 1
-        print("CLM out of candidate_lms(): ",CLM.shape)
+        #print("CLM out of candidate_lms(): ",CLM.shape)
     return CLM
 
 def rOV2(lLM,rLM,fs):
     #Combine bilateral movements if they are separated by < 0.5 seconds
+
     # zeros for column 11 and 12
     rLM = np.insert(rLM,10,values = np.zeros(rLM.shape[0]),axis=1)
     lLM = np.insert(lLM,10,values = np.zeros(lLM.shape[0]),axis=1)
     rLM = np.insert(rLM,11,values = np.zeros(rLM.shape[0]),axis=1)
-    lLM = np.insert(lLM,10,values = np.zeros(lLM.shape[0]),axis=1)
+    lLM = np.insert(lLM,11,values = np.zeros(lLM.shape[0]),axis=1)
 
     #combine and sort LM arrays
     rLM = np.insert(rLM,12,values = np.ones(rLM.shape[0]),axis=1)
@@ -150,7 +153,6 @@ def rOV2(lLM,rLM,fs):
     CLM = combLM
     CLM[:,3] = np.ones(CLM.shape[0])
     #CLM_i  = np.array(CLM, dtype='i')
-
     i = 0
     while i < CLM.shape[0]-1:
     # make sure to check if this is correct logic for the half second
@@ -168,6 +170,7 @@ def rOV2(lLM,rLM,fs):
             if CLM[i,12] != CLM[i+1,12]:
                 CLM[i,12]=3
             CLM[i+1,:] = np.empty(CLM.shape[1])
+    print("CLM rvo2",CLM.shape)
     return CLM
 
 # getIMI calculates intermovement interval and stores in the fourth column
