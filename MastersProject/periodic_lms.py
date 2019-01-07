@@ -23,23 +23,16 @@ def periodic_lms(CLM,params):
         CLMt = removeShortIMI_periodic(CLM,params.minIMIDuration,params.fs)
     else:
         CLMt = CLM
-    #print("CLM ", CLM.shape)
-    #print("params ", params)
 
     CLMt[:,4] = np.zeros(CLMt.shape[0]) # Restart PLM
     BPloct = BPlocAndRunsArray(CLMt,params.minNumIMI)
     CLMt = markPLM3(CLMt,BPloct)
 
-    #print("CLMt after markPLM3()")
-    #print(CLMt)
-
     PLM = []
     for i in range(CLMt.shape[0]-1):
         if CLMt[i,4] == 1:
             PLM.append(CLMt[i,:])
-    #print("PLM after in periodic_lms()")
     PLM = np.asarray(PLM)
-    #print(PLM)
 
     return PLM, CLMt
 ##########################################################################################
@@ -75,15 +68,11 @@ def removeShortIMI_periodic(CLM,minIMIDuration,fs):
 """
 
 def BPlocAndRunsArray(CLM,minNumIMI):
-    #print("BPlocAndRunsArray()")
-    #print("CLM")
-    #print(CLM)
     
     col_1 = find(CLM[:,8],lambda x: x != 0) # BP locations
-    #print(col_1)
-    #print("BPloc")
+    
     BPloc = np.empty([len(col_1),0])
-    #print(BPloc)
+    
     BPloc = np.insert(BPloc,0,col_1,1)
     
 
@@ -92,8 +81,7 @@ def BPlocAndRunsArray(CLM,minNumIMI):
     for i in range(BPloc.shape[0]-1):
         col_2.append(BPloc[i+1,0] - BPloc[i,0])
     col_2.append(CLM.shape[0] - BPloc[BPloc.shape[0]-1,0])
-    #print("col_2")
-    #print(col_2)
+    
 
     BPloc = np.insert(BPloc,1,col_2,1)
 
@@ -102,7 +90,6 @@ def BPlocAndRunsArray(CLM,minNumIMI):
     for i in range(BPloc.shape[0]):
         col_3.append(BPloc[i,1] > minNumIMI)
     BPloc = np.insert(BPloc,2,col_3,1)
-    #print(col_3)
 
     # Mark the number of movements in each PLM series
     col_4 = []
@@ -125,12 +112,10 @@ def BPlocAndRunsArray(CLM,minNumIMI):
 """
 def markPLM3(CLM,BPloc):
     bpPLM = []
-    #print("BPloc len",BPloc)
     for i in range(BPloc.shape[0]):
         if BPloc[i,2] == 1:
             bpPLM.append(BPloc[i,:])
-    #print("bPLM len: ",len(bpPLM))
-    #print("bPLM ",bpPLM)
+    
     bpPLM = np.asarray(bpPLM)
 
     if len(bpPLM) > 0:

@@ -49,9 +49,6 @@ def resteaze_dash(left,right,subjectid):
 
     """synching signals from two legs"""
     leftLeg,rightLeg = syncRE(bandData_left,bandData_right)
-    #print("leftleg,rightleg after syncRE: ")
-    #print(leftLeg)
-    #print(rightLeg)
 
     output.up2Down1 = np.ones((leftLeg.shape[0],1)) 
     
@@ -61,16 +58,12 @@ def resteaze_dash(left,right,subjectid):
     output.lRMS = rms(leftLeg[:,[1,2,3]])
     output.rRMS = rms(rightLeg[:,[1,2,3]])
 
-    #print("output of rms:")
-    print(output.lRMS)
-    print(output.rRMS)
     #################################################
     
     """ compute LM(leg movements) """
     rLM = getLMiPod(params,output.rRMS,output.up2Down1)
     lLM = getLMiPod(params,output.lRMS,output.up2Down1)
-    #print("rLM shape:",rLM.shape)#,"rLM ",rLM)
-    #print("lLM shape:",lLM.shape)#,"lLM ",lLM)
+    
     #################################################
 
     """ Start Patrick's standard scoring stuff """
@@ -78,31 +71,23 @@ def resteaze_dash(left,right,subjectid):
     Arousal = calculateArousal(bCLM,leftLeg,rightLeg)
     output.Arousal = Arousal[Arousal[:,2]==1,:]
     bCLM[:,10] = Arousal[:,2]
-    print("bCLM sh:", bCLM.shape, "bCLM ",bCLM)
     PLM, bCLM = periodic_lms(bCLM,params)
     #################################################
     PLM = np.asarray(PLM)
-    #print("PLM sh::",PLM.shape)
-    #print("PLM ",PLM)
-    #print("bCLM ",bCLM.shape)
-
+    
     """  score sleep/wake """
     output.wake = scoreSleep(params.fs,output.lRMS,PLM,bCLM)
-    #print("wake ", output.wake)
     WASO = calculateWASO_RE(output.wake,params.minSleepTime,params.fs) # NEED TO UPDATE OUTPUT MATRICES AFTER HERE
     
     rLM[:,5] = output.wake[np.array(rLM[:,0],dtype=int)] + 1 # still using up2down1 format
     lLM[:,5] = output.wake[np.array(lLM[:,0],dtype=int)] + 1 # still using up2down1 format
     bCLM[:,5] = output.wake[np.array(bCLM[:,0],dtype=int)] + 1 # still using up2down1 format
-    #print("bcLM ",bCLM)
-    #print("output wake ", output.wake.shape)
-    #print("PLM ",PLM.shape)
+    
     if len(PLM) != 0:
         PLM[:,5] = output.wake[np.array(PLM[:,0],dtype=int)] + 1  # still using up2down1 format
     
     else:
         PLM = []
-    print("PLM 5",output.wake[np.array(PLM[:,0],dtype=int)])
     #################################################
 
     """ Matrices to output """
@@ -115,7 +100,6 @@ def resteaze_dash(left,right,subjectid):
     if len(PLM) != 0:
         xx = find(PLM[:,5],lambda x: x==1)
         output.PLMS = PLM[xx,:]
-        #print("output.PLMS ",output.PLMS)
     
     #################################################
     """ Quantitative measures to output """
@@ -126,8 +110,7 @@ def resteaze_dash(left,right,subjectid):
     output.WASOnum = WASO.num
     output.WASOdur = WASO.dur
     output.WASOavgdur = WASO.avgdur
-    #print("TRT ", output.TRT)
-    #print("TST ",output.TST)
+
 
     if len(output.PLMS) != 0: #change this to !=0
         output.PI = sum( np.array(output.PLMS[:,8]==0,dtype=int) ) / (output.bCLM.shape[0]-1)
@@ -143,9 +126,7 @@ def resteaze_dash(left,right,subjectid):
 
         output.avgPLMSDuration = np.mean(PLM[plm_5,2])
         output.stdPLMSDuration = np.std(PLM[plm_5,2])
-        #rint("outpur TST ", output.TST)
-        #print("sum(PLM) ",sum(PLM[:,5]==1))
-
+    
         output.PLMhr = PLM.shape[0]/(output.TRT/60)
         output.PLMShr = sum(PLM[:,5]==1)/(output.TST/60)
         output.PLMWhr = sum(PLM[:,5]==2)/((output.TRT-output.TST)/60)
@@ -210,14 +191,6 @@ def resteaze_dash(left,right,subjectid):
 
     output.SQ = 0
     output.SQhrs = []
-
-    #print("intervalSize ",output.intervalSize)
-    #print("pos ",output.pos)
-    #print("ArI ",output.ArI)
-    #print("PLMSI ",output.PLMSI)
-    #print("Arousal ",output.Arousal)
-    #print("sleepEnd ",output.sleepEnd)
-    #print("date ",output.date)
 
     nightData = output
 

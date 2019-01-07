@@ -10,26 +10,16 @@ def scoreSleep(fs,RMS,LM,GLM):
     #Calculate numLMper10epochs - the number of GLM+LM per 10 epochs
     dataPtsPerWindow = 30 * 10 * fs
     numWindows = np.ceil(RMS.shape[0]/dataPtsPerWindow)
-    #print("dataPoints ",dataPtsPerWindow)
-    #print("numWindow ", numWindows)
     LM = np.array(LM)
     GLM = np.array(GLM)
-    print("LM")
-    print(LM.shape)
-    print("GLM")
-    print(GLM.shape)
-    #print(GLM[0:GLM.shape[0],0])
 
-    #print("concatenate")
     if LM.size != 0:
         b = np.concatenate((LM[0:LM.shape[0],0], GLM[0:GLM.shape[0],0]), axis=0)
     else:
         b = GLM[0:GLM.shape[0],0]
 
     xy = np.arange(0,numWindows*dataPtsPerWindow+1,dataPtsPerWindow)
-    #print("xy ",xy)
     numLMper10epochs = np.histogram(b,xy)[0]
-    print("numLMper10epochs ",numLMper10epochs)
 
     # wakeLM is a logical vector indicating whether there is at least 1 GLM,LM in
     # the 10 epochwindow that the current dataPt is in (0=there is LM, 1= no LM) 1 corresponds to wake.

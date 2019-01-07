@@ -8,13 +8,10 @@ import numpy as np
  rate is constant
 """
 def syncRE(leftLeg,rightLeg):
-    #print("in syncRE")
+    
     leftLegsize = leftLeg.shape[0]
     rightLegsize = rightLeg.shape[0]
     
-    #print("leftsize ",leftLegsize,"leftLeg " , leftLeg[:,3])
-    #print("rightsize ",rightLegsize,"rightLeg ",rightLeg[:,3])
-
     # start of sync
     if leftLeg[0,3] > rightLeg[0,3]:
         rightstart = 0
@@ -50,6 +47,5 @@ def syncRE(leftLeg,rightLeg):
     elif leftLegsize < rightLegsize:
         rightLeg = rightLeg[0:leftLegsize,:]
         leftminusright = leftLeg[leftLegsize-1,3] - rightLeg[leftLegsize-1,3]
-    #print("legs data synchronized...")
-    #print("leftlegSize ",leftLeg,"rightLegSize ",rightLeg)
+    
     return leftLeg,rightLeg

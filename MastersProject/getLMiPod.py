@@ -75,7 +75,6 @@ def getLMiPod(paramsiPod,RMS,up2Down1):
         col_10.append(np.sum(RMS[LM_i[i,0]:LM_i[i,1]])/paramsiPod.fs)
     LM = np.insert(LM,9,values=col_10,axis=1)
 
-    #print("end of: getLMiPod")
     return LM
 #########################################################
 
@@ -97,7 +96,6 @@ def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
         temp = np.median(dsEMG[LM_i[i,0]:LM_i[i,1]])
         median_col.append(temp)
     LM1 = np.insert(LM1,3,values=median_col,axis=1)
-    #print("LM1 ",LM1)
 
     if opt == 1:
         LM = shrinkWindow(LM1,dsEMG,fs,min)
@@ -109,21 +107,18 @@ def cutLowMedian(dsEMG,LM1,min,fs,**kwargs):
 
     # Exclude movements that still are empty
     LM = LM[LM[:,3] > min,0:2]
-    #print("after cutLowMedian ",LM.shape)
     return LM
     
 #A different method of checking for a movement within the movement. This
 # searches for any 0.5 second window where the median is above noise level.
 def shrinkWindow(LM,dsEMG,fs,min):
-    #print("shrinkWindow():")
-    #print("min ",min)
+    
     empty = find(LM[:,3], lambda x: x < min)
     #print("empty ",empty)
     for i in range(len(empty)):
         initstart = int(LM[empty[i],0])
         initstop = int(LM[empty[i],1])
         a = np.median(dsEMG[initstart:initstop])
-        #print("initstart ",initstart,"initstop ",initstop,"a ",a)
         start = int(LM[empty[i]][0])
         stop = int(start + fs/2)
         while a < min and stop < initstop:
@@ -136,7 +131,6 @@ def shrinkWindow(LM,dsEMG,fs,min):
 #Attempt to reduce the duration of the event in order to find a movement
 #that fits minimum density requirement.
 def tryShrinking(LM1,dsEMG,fs,min):
-    #print("tryShrinking():")
     short = find(LM1[:,3], lambda x: x < min)
     for i in range(len(short)):
         start = int(LM1[short[i]][0])
@@ -152,13 +146,6 @@ def findIndices(data,lowThreshold,highThreshold,minLowDuration,minHighDuration,f
     minHighDuration = minHighDuration * fs
     lowValues = find(data, lambda x: x < lowThreshold) 
     highValues = find(data, lambda x: x > highThreshold)
-    #print("data ",np.array(data))
-    #print("lowThreshold ",lowThreshold,"highThreshold ",highThreshold)
-    #print("minLowDuration ",minLowDuration,"minHighDuration ",minHighDuration)
-    #print("highValues ",len(highValues))
-    #print(highValues)
-    #print("lowValues ",len(lowValues))
-    #print(lowValues)
 
     if len(highValues) < 1:
         fullRuns[0][0] = 0
@@ -200,7 +187,6 @@ def returnRuns(vals,duration):
     k = np.insert(k, 0, 1, axis=0)
     s = np.cumsum(k)
     x = np.histogram(s,np.arange(1,s[-1]+2))[0]
-    #print("x ",len(x))
     idx = find(k, lambda x: x != 0) 
     idx = np.asarray(idx)
     startIndices = vals[idx[x>=duration]]

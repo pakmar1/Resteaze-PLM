@@ -22,9 +22,6 @@ from utilities import  rms, find
 
 def candidate_lms(rLM,lLM,params):
     CLM=[]
-    #print("lLM ",lLM.shape)
-    #print("rLM ",rLM.shape)
-    print("CLM sha before",lLM.shape, rLM.shape)
 
     if rLM.size != 0 and lLM.size != 0:
         #print("both full")
@@ -41,8 +38,7 @@ def candidate_lms(rLM,lLM,params):
 
         # Combine left and right and sort.
         CLM = rOV2(lLM,rLM,params.fs)
-        #print("CLM after rOV2")
-        #print(CLM.shape)
+        
     elif lLM.size != 0:
         print("left is full")
         lLM[:,2] = (lLM[:,1] - lLM[:,0])/params.fs
@@ -170,7 +166,7 @@ def rOV2(lLM,rLM,fs):
             if CLM[i,12] != CLM[i+1,12]:
                 CLM[i,12]=3
             CLM[i+1,:] = np.empty(CLM.shape[1])
-    print("CLM rvo2",CLM.shape)
+    #print("CLM rvo2",CLM.shape)
     return CLM
 
 # getIMI calculates intermovement interval and stores in the fourth column

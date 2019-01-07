@@ -81,8 +81,4 @@ def calculateWASO_RE(wake,minSleepTime,fs):
         WASO.dur = sum(dur) /fs/60
         WASO.avgdur = mean(dur)/fs/60
 
-        #print("WASO sleepStart",WASO.sleepStart)
-        #print("WASO num ",WASO.num)
-        #print("WASO dur",WASO.dur)
-        #print("WASO avgdur",WASO.avgdur)
     return WASO
