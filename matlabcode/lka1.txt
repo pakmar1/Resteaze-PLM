@@ -1,0 +1,10 @@
+PatientID: lka
+Record Start: 18:59
+Record Stop: 02:09
+Sleep Efficiency: 0.80
+Total Sleep Time: 345.76
+PLMS/hr: 0.00
+Arousals/hr: 0.00
+Sleep Quality: 0.00
+WASO: 85.00
+Sleep_quality_per_hr : 
