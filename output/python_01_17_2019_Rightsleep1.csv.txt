@@ -1,0 +1,10 @@
+PatientID: output/python_01_17_2019_Rightsleep1.csv
+Record Start: 18:59
+Record Stop: 03:12
+Sleep Efficiency:  0.87
+Total Sleep Time:  428.26
+PLMS/hr:  0.00
+Arousals/hr:  0.00
+Sleep Quality:  0.00
+WASO: 65.00
+Sleep_quality_per_hr :

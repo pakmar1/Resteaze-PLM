@@ -120,7 +120,7 @@ for i=1:max([size(leftFileNames,2) size(rightFileNames,2)])
     rLM=getLMiPod(params,output.rRMS,output.up2Down1);
     lLM=getLMiPod(params,output.lRMS,output.up2Down1);
     
-    %% Start Patrick's standard scoring stuff %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% Start Patrick''s standard scoring stuff %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     bCLM = candidate_lms(rLM,lLM,params);
     Arousal=calculateArousal(bCLM,leftLeg,rightLeg);
     output.Arousal=Arousal(Arousal(:,3)==1,:);

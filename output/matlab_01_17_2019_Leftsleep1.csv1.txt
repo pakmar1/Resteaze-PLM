@@ -1,0 +1,10 @@
+PatientID: ../output/matlab_01_17_2019_Leftsleep1.csv
+Record Start: 18:59
+Record Stop: 03:13
+Sleep Efficiency: 0.87
+Total Sleep Time: 430.79
+PLMS/hr: 0.00
+Arousals/hr: 0.00
+Sleep Quality: 0.00
+WASO: 64.00
+Sleep_quality_per_hr : 
